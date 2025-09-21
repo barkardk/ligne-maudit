@@ -43,3 +43,6 @@ screenshots/
 # Temporary files
 *.tmp
 *.bak
+
+# AI prompts (keep private)
+prompts/

@@ -22,6 +22,14 @@ venv:
 	fi
 	@$(PYTHON) -c "import sys; exit(0 if sys.version_info >= (3, 10) else 1)" || \
 		(echo "ERROR: Python 3.10+ required. Found: $$($(PYTHON) --version)"; exit 1)
+	@echo "Checking for Homebrew and SDL2..."
+	@if ! command -v brew >/dev/null 2>&1; then \
+		echo "ERROR: Homebrew not found. Please install Homebrew first:"; \
+		echo "  /bin/bash -c \"\$$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""; \
+		exit 1; \
+	fi
+	@echo "Installing required dependencies via Homebrew..."
+	@brew install pkg-config sdl2 sdl2_image sdl2_mixer sdl2_ttf freetype
 	@if [ ! -d "venv" ]; then \
 		echo "Creating virtual environment..."; \
 		$(PYTHON) -m venv venv; \

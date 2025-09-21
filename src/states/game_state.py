@@ -32,7 +32,9 @@ class GameStateManager:
 
     def handle_event(self, event):
         if self.states:
-            self.states[-1].handle_event(event)
+            result = self.states[-1].handle_event(event)
+            return result
+        return None
 
     def update(self, dt):
         if self.states:

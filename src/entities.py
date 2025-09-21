@@ -40,7 +40,7 @@ class Character:
 
 class Player(Character):
     def __init__(self, name="Soldier", job="Infantry"):
-        super().__init__(name, hp=80, attack=15, defense=8, speed=12)
+        super().__init__(name, 80, 15, 8, 12)  # max_hp, attack, defense, speed
         self.job = job
         self.exp = 0
         self.level = 1

@@ -1,5 +1,7 @@
 import pygame
 from .states.combat import CombatState
+from .states.field import FieldState
+from .states.puzzle_state import TicTacToePuzzleState
 from .states.game_state import GameStateManager
 
 class Game:
@@ -14,14 +16,26 @@ class Game:
         self.running = True
 
         self.state_manager = GameStateManager()
-        self.state_manager.push_state(CombatState(self.screen))
+        self.state_manager.push_state(FieldState(self.screen))
+
+    def handle_state_transition(self, new_state_name):
+        """Handle transitions between game states"""
+        if new_state_name == "puzzle":
+            # Push puzzle state on top of field state
+            puzzle_state = TicTacToePuzzleState(self.screen)
+            self.state_manager.push_state(puzzle_state)
+        elif new_state_name == "field":
+            # Return to field by popping current state
+            self.state_manager.pop_state()
 
     def handle_events(self):
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.running = False
             else:
-                self.state_manager.handle_event(event)
+                result = self.state_manager.handle_event(event)
+                if result:
+                    self.handle_state_transition(result)
 
     def update(self, dt):
         self.state_manager.update(dt)
