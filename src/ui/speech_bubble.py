@@ -1,14 +1,14 @@
 import pygame
 
 class SpeechBubble:
-    def __init__(self, x, y, width=120, height=60):
+    def __init__(self, x, y, width=80, height=40):
         self.x = x
         self.y = y
         self.width = width
         self.height = height
         self.visible = False
         self.text = ""
-        self.font = pygame.font.Font(None, 36)
+        self.font = pygame.font.Font(None, 28)
 
     def show(self, text="!", x=None, y=None):
         """Show speech bubble with text at position"""
@@ -38,11 +38,11 @@ class SpeechBubble:
         pygame.draw.ellipse(screen, bubble_color, bubble_rect)
         pygame.draw.ellipse(screen, border_color, bubble_rect, 3)
 
-        # Bubble tail (pointing down)
+        # Bubble tail (pointing down) - smaller proportional tail
         tail_points = [
-            (self.x + self.width // 2 - 10, self.y + self.height),
-            (self.x + self.width // 2, self.y + self.height + 15),
-            (self.x + self.width // 2 + 10, self.y + self.height)
+            (self.x + self.width // 2 - 7, self.y + self.height),
+            (self.x + self.width // 2, self.y + self.height + 10),
+            (self.x + self.width // 2 + 7, self.y + self.height)
         ]
         pygame.draw.polygon(screen, bubble_color, tail_points)
         pygame.draw.polygon(screen, border_color, tail_points, 3)
@@ -76,13 +76,9 @@ class InteractionPrompt:
         pygame.draw.rect(screen, (0, 0, 0, 180), panel_rect)
         pygame.draw.rect(screen, (255, 255, 255), panel_rect, 2)
 
-        # Instructions
-        instructions = [
-            "Press X to examine the door puzzle",
-            "Press Y to walk away"
-        ]
+        # Instructions - only X key now
+        instruction = "Press X to investigate"
 
-        for i, instruction in enumerate(instructions):
-            text_surface = self.font.render(instruction, True, (255, 255, 255))
-            y_pos = screen.get_height() - panel_height + 15 + (i * 30)
-            screen.blit(text_surface, (20, y_pos))
+        text_surface = self.font.render(instruction, True, (255, 255, 255))
+        y_pos = screen.get_height() - panel_height + 25  # Center vertically
+        screen.blit(text_surface, (20, y_pos))

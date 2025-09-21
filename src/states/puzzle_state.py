@@ -38,7 +38,7 @@ class TicTacToePuzzleState(GameState):
 
     def handle_event(self, event):
         if event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_y:
+            if event.key == pygame.K_y or event.key == pygame.K_ESCAPE:
                 # Return to field scene
                 return "field"
             elif event.key == pygame.K_r:
@@ -148,11 +148,21 @@ class TicTacToePuzzleState(GameState):
             screen.blit(text, (50, self.screen_height - 120 + i * 25))
 
     def draw_solution_pattern(self, screen):
-        """Draw the target pattern (smaller, at top)"""
-        pattern_size = 150
+        """Draw the target pattern (prominent, at top)"""
+        pattern_size = 200  # Make it bigger
         pattern_cell_size = pattern_size // 3
         pattern_x = self.screen_width // 2 - pattern_size // 2
-        pattern_y = 150
+        pattern_y = 120  # Move it higher up
+
+        # Draw bright background panel for the entire pattern area
+        panel_rect = pygame.Rect(pattern_x - 20, pattern_y - 60, pattern_size + 40, pattern_size + 80)
+        pygame.draw.rect(screen, (255, 255, 255), panel_rect)  # White background
+        pygame.draw.rect(screen, (255, 255, 0), panel_rect, 5)  # Yellow border
+
+        # Draw title above the pattern
+        title_text = self.font.render("TARGET PATTERN", True, (0, 0, 0))  # Black text on white
+        title_rect = title_text.get_rect(center=(self.screen_width // 2, pattern_y - 30))
+        screen.blit(title_text, title_rect)
 
         # Draw pattern grid
         for row in range(3):
@@ -160,16 +170,20 @@ class TicTacToePuzzleState(GameState):
                 cell_x = pattern_x + col * pattern_cell_size
                 cell_y = pattern_y + row * pattern_cell_size
 
-                # Cell background
-                pygame.draw.rect(screen, (60, 60, 60),
+                # Cell background - bright and clear
+                pygame.draw.rect(screen, (240, 240, 240),
                                (cell_x, cell_y, pattern_cell_size, pattern_cell_size))
-                pygame.draw.rect(screen, (100, 100, 100),
-                               (cell_x, cell_y, pattern_cell_size, pattern_cell_size), 2)
+                pygame.draw.rect(screen, (0, 0, 0),
+                               (cell_x, cell_y, pattern_cell_size, pattern_cell_size), 3)
 
-                # Draw symbol
+                # Draw symbol with maximum contrast
                 symbol = self.solution[row][col]
                 if symbol:
-                    text = self.small_font.render(symbol, True, (255, 255, 255))
+                    # Use very bold colors and larger font
+                    color = (255, 0, 0) if symbol == 'X' else (0, 0, 255)  # Red X, Blue O
+                    # Use larger font for pattern
+                    big_font = pygame.font.Font(None, int(pattern_cell_size * 0.7))
+                    text = big_font.render(symbol, True, color)
                     text_rect = text.get_rect(center=(cell_x + pattern_cell_size // 2,
                                                     cell_y + pattern_cell_size // 2))
                     screen.blit(text, text_rect)

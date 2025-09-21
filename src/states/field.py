@@ -3,6 +3,10 @@ import sys
 import os
 from .game_state import GameState
 from ..ui.speech_bubble import SpeechBubble, InteractionPrompt
+from ..ui.action_indicator import ActionIndicator
+from ..effects.light_effect import LightManager
+from ..effects.weather_system import WeatherSystem
+from ..audio.audio_manager import AudioManager
 
 # Add the project root to the path to import assets
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
@@ -54,20 +58,26 @@ class FieldState(GameState):
             elif frame_w <= 160 and frame_h <= 240:
                 self.character_display_scale = 0.7  # Large sprites (128x192, etc.)
                 print("Using 0.7x scale for large sprites")
+            elif frame_w == 256 and frame_h == 320:
+                self.character_display_scale = 0.25  # 256x320 sprites -> ~64x80 display
+                print("Using 0.25x scale for 256x320 sprites")
             else:
                 self.character_display_scale = 0.25  # Very large sprites (256x384) -> ~64x96 display
                 print("Using 0.25x scale for very large sprites")
         else:
             self.character_display_scale = 1.0  # Default fallback
 
-        # Protagonist position
-        self.protagonist_x = 100
-        self.protagonist_y = self.screen_height // 2 + 50
+        # Set initial animation to face down (towards player)
+        self.protagonist_animation.play_animation('idle_down')
+
+        # Protagonist position - bottom center, ready to walk up the path
+        self.protagonist_x = self.screen_width // 2 - 32  # Center horizontally
+        self.protagonist_y = self.screen_height - 100  # Bottom of screen with some margin
 
         # Movement
         self.move_speed = 100  # pixels per second
         self.is_moving = False
-        self.last_facing_direction = 'down'  # Remember last facing direction
+        self.last_facing_direction = 'down'  # Start facing down (towards player)
 
         # Shooting
         self.bullets = []
@@ -75,7 +85,7 @@ class FieldState(GameState):
         self.shoot_delay = 0.2  # seconds between shots
 
         # Door interaction
-        self.speech_bubble = SpeechBubble(0, 0)
+        self.action_indicator = ActionIndicator(0, 0)
         self.interaction_prompt = InteractionPrompt()
         self.near_door = False
         self.door_interaction_distance = 45  # pixels (smaller)
@@ -84,9 +94,25 @@ class FieldState(GameState):
         self.door_x = 467  # 25 pixels to the right
         self.door_y = 575  # 25 pixels up
 
-        print("Field state initialized - Press arrow keys to move, F to shoot, C to toggle collision debug!")
+        # Create lighting effects
+        self.light_manager = LightManager()
+        # Add flickering light in tower window (estimated position above and to the right of door)
+        tower_window_x = self.door_x + 54  # To the right of door (moved 26 pixels left total)
+        tower_window_y = self.door_y - 150  # Above the door
+        self.light_manager.add_light(tower_window_x, tower_window_y, radius=6, color=(255, 220, 120))
+
+        # Create weather system
+        self.weather = WeatherSystem(self.screen_width, self.screen_height)
+
+        # Create audio manager and start ambient sound
+        self.audio = AudioManager()
+        self.audio.load_ambient_pack()
+        self.audio.play_ambient("forest_rain", loop=True, fade_in_ms=3000)
+
+        print("Field state initialized - Press arrow keys to move, F to shoot, C to toggle collision debug, SPACE to toggle audio!")
         print(f"Collision areas detected: {len(self.collision_map.collision_rects)}")
         print(f"Door located at: ({self.door_x}, {self.door_y})")
+        print(f"Tower window light at: ({tower_window_x}, {tower_window_y})")
 
     def check_door_proximity(self):
         """Check if protagonist is near the door and handle speech bubble"""
@@ -107,15 +133,15 @@ class FieldState(GameState):
 
     def show_door_interaction(self):
         """Show door interaction UI"""
-        # Position speech bubble above the door
-        bubble_x = self.door_x - 60  # Center bubble over door
-        bubble_y = self.door_y - 80  # Above the door
-        self.speech_bubble.show("!", bubble_x, bubble_y)
+        # Position yellow exclamation mark above the door
+        indicator_x = self.door_x
+        indicator_y = self.door_y - 60  # Above the door
+        self.action_indicator.show(indicator_x, indicator_y)
         self.interaction_prompt.show()
 
     def hide_door_interaction(self):
         """Hide door interaction UI"""
-        self.speech_bubble.hide()
+        self.action_indicator.hide()
         self.interaction_prompt.hide()
 
     def handle_event(self, event):
@@ -126,12 +152,12 @@ class FieldState(GameState):
             elif event.key == pygame.K_c:
                 # Toggle collision debug mode
                 self.collision_map.toggle_debug()
+            elif event.key == pygame.K_SPACE:
+                # Toggle audio mute
+                self.audio.toggle_mute()
             elif event.key == pygame.K_x and self.near_door:
                 # Enter puzzle scene
                 return "puzzle"
-            elif event.key == pygame.K_y and self.near_door:
-                # Walk away from door
-                self.hide_door_interaction()
 
         return None  # Stay in this state
 
@@ -174,9 +200,11 @@ class FieldState(GameState):
             sprite_width = int(64 * 2.52 * self.character_display_scale)
             sprite_height = int(96 * 2.52 * self.character_display_scale)
 
-        # Keep protagonist on screen
+        # Keep protagonist on screen and add door height restriction
         new_x = max(0, min(self.screen_width - sprite_width, new_x))
-        new_y = max(0, min(self.screen_height - sprite_height, new_y))
+        # Don't allow protagonist to go higher than the door's top edge
+        min_y = max(0, self.door_y - 50)  # Allow some space above door
+        new_y = max(min_y, min(self.screen_height - sprite_height, new_y))
 
         # Check collision and get valid position
         self.protagonist_x, self.protagonist_y = self.collision_map.get_valid_position(
@@ -222,12 +250,24 @@ class FieldState(GameState):
         # Update animation system
         self.protagonist_animation.update(dt)
 
+        # Update lighting effects
+        self.light_manager.update(dt)
+
+        # Update weather system
+        self.weather.update(dt)
+
+        # Update action indicator animation
+        self.action_indicator.update(dt)
+
         # Check proximity to door
         self.check_door_proximity()
 
     def render(self, screen):
         # Draw background
         screen.blit(self.background, (0, 0))
+
+        # Draw lighting effects
+        self.light_manager.draw(screen)
 
         # Draw bullets
         for bullet in self.bullets:
@@ -246,6 +286,9 @@ class FieldState(GameState):
 
             screen.blit(protagonist_sprite, (int(self.protagonist_x), int(self.protagonist_y)))
 
+        # Draw weather effects (rain and lightning over everything)
+        self.weather.draw(screen)
+
         # Draw collision debug if enabled
         self.collision_map.render_debug(screen)
 
@@ -261,5 +304,10 @@ class FieldState(GameState):
         screen.blit(location_text, text_rect)
 
         # Draw door interaction UI
-        self.speech_bubble.render(screen)
+        self.action_indicator.render(screen)
         self.interaction_prompt.render(screen)
+
+    def cleanup(self):
+        """Clean up resources when field state is destroyed"""
+        if hasattr(self, 'audio'):
+            self.audio.cleanup()

@@ -198,7 +198,8 @@ def load_protagonist_from_sprite_sheet():
 
     # Try different common frame sizes for SNES/PS1 era sprites
     frame_sizes = [
-        (256, 384), # Current high-res raw sprites
+        (256, 320), # Correct frame size - prevents overlap
+        (256, 384), # Previous incorrect size
         (48, 64),   # Processed sprites (for future use)
         (64, 96),   # Alternative high-res
         (32, 48),   # Standard SNES tall
@@ -250,23 +251,23 @@ def load_protagonist_from_sprite_sheet():
                 # Walking animations - assume first frame is idle, next 3 are walking
                 # For 4x4 grid: idle + 3 walking frames per row
                 if sprite_sheet.cols >= 4:
-                    # Extract idle frame (first in each row)
+                    # Extract idle frame (first in each row) - Fix left direction
                     idle_down = sprite_sheet.get_animation_frames(0, 0, 1, 'horizontal')
-                    idle_left = sprite_sheet.get_animation_frames(0, 1, 1, 'horizontal')
-                    idle_right = sprite_sheet.get_animation_frames(0, 2, 1, 'horizontal')
-                    idle_up = sprite_sheet.get_animation_frames(0, 3, 1, 'horizontal')
+                    idle_left = sprite_sheet.get_animation_frames(0, 2, 1, 'horizontal')  # Try row 2 for left
+                    idle_right = sprite_sheet.get_animation_frames(0, 1, 1, 'horizontal')  # Try row 1 for right
+                    idle_up = sprite_sheet.get_animation_frames(0, 3, 1, 'horizontal')  # Row 3 for up
 
                     # Extract walking frames (frames 1, 2, 3 in each row)
                     walk_down = sprite_sheet.get_animation_frames(1, 0, 3, 'horizontal')
-                    walk_left = sprite_sheet.get_animation_frames(1, 1, 3, 'horizontal')
-                    walk_right = sprite_sheet.get_animation_frames(1, 2, 3, 'horizontal')
-                    walk_up = sprite_sheet.get_animation_frames(1, 3, 3, 'horizontal')
+                    walk_left = sprite_sheet.get_animation_frames(1, 2, 3, 'horizontal')  # Try row 2 for left
+                    walk_right = sprite_sheet.get_animation_frames(1, 1, 3, 'horizontal')  # Try row 1 for right
+                    walk_up = sprite_sheet.get_animation_frames(1, 3, 3, 'horizontal')  # Row 3 for up
                 else:
                     # Fallback for smaller grids
                     walk_down = sprite_sheet.get_animation_frames(0, 0, min(4, sprite_sheet.cols), 'horizontal')
-                    walk_left = sprite_sheet.get_animation_frames(0, 1, min(4, sprite_sheet.cols), 'horizontal')
-                    walk_right = sprite_sheet.get_animation_frames(0, 2, min(4, sprite_sheet.cols), 'horizontal')
-                    walk_up = sprite_sheet.get_animation_frames(0, 3, min(4, sprite_sheet.cols), 'horizontal')
+                    walk_left = sprite_sheet.get_animation_frames(0, 2, min(4, sprite_sheet.cols), 'horizontal')  # Try row 2 for left
+                    walk_right = sprite_sheet.get_animation_frames(0, 1, min(4, sprite_sheet.cols), 'horizontal')  # Try row 1 for right
+                    walk_up = sprite_sheet.get_animation_frames(0, 3, min(4, sprite_sheet.cols), 'horizontal')  # Row 3 for up
 
                     idle_down = [walk_down[0]] if walk_down else []
                     idle_left = [walk_left[0]] if walk_left else []
