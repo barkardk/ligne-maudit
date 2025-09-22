@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Ligne Maudite - A Final Fantasy-style turn-based RPG
-Set in the cursed underground bunkers of the Maginot Line
+Ligne Maudite  - A Final Fantasy-style turn-based RPG
+Set in the cursed underground bunkers of the Maginot Line during WWII.
 """
 
 import pygame
