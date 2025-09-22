@@ -76,8 +76,8 @@ class InteractionPrompt:
         pygame.draw.rect(screen, (0, 0, 0, 180), panel_rect)
         pygame.draw.rect(screen, (255, 255, 255), panel_rect, 2)
 
-        # Instructions - only X key now
-        instruction = "Press X to investigate"
+        # Instructions - ENTER key now
+        instruction = "Press ENTER to investigate"
 
         text_surface = self.font.render(instruction, True, (255, 255, 255))
         y_pos = screen.get_height() - panel_height + 25  # Center vertically

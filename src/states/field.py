@@ -1,9 +1,11 @@
 import pygame
 import sys
 import os
+import random
 from .game_state import GameState
 from ..ui.speech_bubble import SpeechBubble, InteractionPrompt
 from ..ui.action_indicator import ActionIndicator
+from ..ui.quit_overlay import QuitOverlay
 from ..effects.light_effect import LightManager
 from ..effects.weather_system import WeatherSystem
 from ..audio.audio_manager import AudioManager
@@ -20,7 +22,7 @@ from assets.sprites.protagonist import create_protagonist_animation_system
 from assets.sprites.bullet import Bullet, get_direction_from_keys
 
 class FieldState(GameState):
-    def __init__(self, screen):
+    def __init__(self, screen, audio_manager=None):
         self.screen = screen
         self.screen_width = screen.get_width()
         self.screen_height = screen.get_height()
@@ -90,6 +92,27 @@ class FieldState(GameState):
         self.near_door = False
         self.door_interaction_distance = 45  # pixels (smaller)
 
+        # Quit overlay
+        self.quit_overlay = QuitOverlay()
+
+        # Flash interaction - lower half, left side
+        self.flash_x = 195  # Left side of screen
+        self.flash_y = 595  # Lower half
+        self.flash_size = 15  # 15x15 collision box
+        self.near_flash = False
+        self.flash_interaction_distance = 30  # pixels
+        self.flash_has_key = True  # Initially has key
+        self.flash_discovered = False  # Track if flash has been discovered
+
+        # Flickering light effect
+        self.flicker_timer = 0.0
+        self.flicker_base_interval = 0.8  # Base flicker rate
+        self.flicker_variance = 0.6  # Random variance for natural flickering
+        self.flicker_duration = 0.1  # Very brief flicker
+        self.show_flicker = False
+        self.flicker_intensity = 0.0  # Intensity of current flicker
+        self.next_flicker_time = 0.0
+
         # Get door position - lower third center
         self.door_x = 467  # 25 pixels to the right
         self.door_y = 575  # 25 pixels up
@@ -104,15 +127,72 @@ class FieldState(GameState):
         # Create weather system
         self.weather = WeatherSystem(self.screen_width, self.screen_height)
 
-        # Create audio manager and start ambient sound
-        self.audio = AudioManager()
-        self.audio.load_ambient_pack()
-        self.audio.play_ambient("forest_rain", loop=True, fade_in_ms=3000)
+        # Use shared audio manager or create new one
+        if audio_manager:
+            self.audio = audio_manager
+        else:
+            self.audio = AudioManager()
+            self.audio.load_ambient_pack()
+
+        # Only start audio if not already playing and not muted (to preserve mute state)
+        if not self.audio.is_muted_state():
+            if not self.audio.is_ambient_playing():
+                self.audio.play_ambient("forest_rain", loop=True, fade_in_ms=3000)
+            if not self.audio.is_music_playing():
+                self.audio.play_music("forest_rain_music", loop=True, fade_in_ms=3000)
 
         print("Field state initialized - Press arrow keys to move, F to shoot, C to toggle collision debug, SPACE to toggle audio!")
         print(f"Collision areas detected: {len(self.collision_map.collision_rects)}")
         print(f"Door located at: ({self.door_x}, {self.door_y})")
+        print(f"Flash located at: ({self.flash_x}, {self.flash_y})")
         print(f"Tower window light at: ({tower_window_x}, {tower_window_y})")
+
+    def check_flash_proximity(self):
+        """Check if protagonist is near the flash and handle interaction UI"""
+        # Only check proximity if flash hasn't been discovered
+        if self.flash_discovered:
+            if self.near_flash:
+                self.hide_flash_interaction()
+            self.near_flash = False
+            return
+
+        # Calculate distance from protagonist to flash center
+        protagonist_center_x = self.protagonist_x + (self.protagonist_animation.get_current_frame().get_width() * self.character_display_scale) // 2 if self.protagonist_animation.get_current_frame() else self.protagonist_x + 32
+        protagonist_center_y = self.protagonist_y + (self.protagonist_animation.get_current_frame().get_height() * self.character_display_scale) // 2 if self.protagonist_animation.get_current_frame() else self.protagonist_y + 48
+
+        flash_center_x = self.flash_x + self.flash_size // 2
+        flash_center_y = self.flash_y + self.flash_size // 2
+
+        distance = ((protagonist_center_x - flash_center_x) ** 2 + (protagonist_center_y - flash_center_y) ** 2) ** 0.5
+
+        if distance <= self.flash_interaction_distance:
+            if not self.near_flash:
+                self.show_flash_interaction()
+            self.near_flash = True
+        else:
+            if self.near_flash:
+                self.hide_flash_interaction()
+            self.near_flash = False
+
+    def show_flash_interaction(self):
+        """Show flash interaction UI"""
+        # Position yellow exclamation mark above the flash
+        indicator_x = self.flash_x + self.flash_size // 2
+        indicator_y = self.flash_y - 40  # Above the flash
+        self.action_indicator.show(indicator_x, indicator_y)
+        self.interaction_prompt.show()
+
+    def hide_flash_interaction(self):
+        """Hide flash interaction UI"""
+        if not self.near_door:  # Only hide if not near door
+            self.action_indicator.hide()
+            self.interaction_prompt.hide()
+
+    def take_key_from_flash(self):
+        """Called when player takes key from flash"""
+        self.flash_has_key = False
+        self.flash_discovered = True
+        print("You took the key! The flash area is now inactive.")
 
     def check_door_proximity(self):
         """Check if protagonist is near the door and handle speech bubble"""
@@ -141,27 +221,48 @@ class FieldState(GameState):
 
     def hide_door_interaction(self):
         """Hide door interaction UI"""
-        self.action_indicator.hide()
-        self.interaction_prompt.hide()
+        if not self.near_flash:  # Only hide if not near flash
+            self.action_indicator.hide()
+            self.interaction_prompt.hide()
 
     def handle_event(self, event):
+        # Handle quit overlay input first if it's visible
+        if self.quit_overlay.is_visible():
+            result = self.quit_overlay.handle_input(event)
+            if result == "quit":
+                # Signal the game to quit
+                pygame.event.post(pygame.event.Event(pygame.QUIT))
+                return None
+            elif result == "resume":
+                # Resume game (overlay already hidden)
+                return None
+            # If quit overlay is visible, don't handle other inputs
+            return None
+
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
-                # You can add a menu state or return to main menu here
-                pass
+                # Show quit overlay
+                self.quit_overlay.show()
             elif event.key == pygame.K_c:
                 # Toggle collision debug mode
                 self.collision_map.toggle_debug()
             elif event.key == pygame.K_SPACE:
                 # Toggle audio mute
                 self.audio.toggle_mute()
-            elif event.key == pygame.K_x and self.near_door:
-                # Enter puzzle scene
-                return "puzzle"
+            elif event.key == pygame.K_RETURN and self.near_door:
+                # Enter door close-up view
+                return "door"
+            elif event.key == pygame.K_RETURN and self.near_flash:
+                # Interact with flash
+                return "flash"
 
         return None  # Stay in this state
 
     def update(self, dt):
+        # Don't update game logic if quit overlay is visible (pause the game)
+        if self.quit_overlay.is_visible():
+            return
+
         keys = pygame.key.get_pressed()
         self.is_moving = False
 
@@ -259,8 +360,25 @@ class FieldState(GameState):
         # Update action indicator animation
         self.action_indicator.update(dt)
 
-        # Check proximity to door
+        # Update flickering light effect
+        if not self.flash_discovered:
+            self.flicker_timer += dt
+
+            # Check if it's time for next flicker
+            if self.flicker_timer >= self.next_flicker_time:
+                # Start new flicker
+                self.show_flicker = True
+                self.flicker_intensity = random.uniform(0.3, 1.0)  # Random intensity
+                # Set next flicker time with variance
+                self.next_flicker_time = self.flicker_timer + self.flicker_base_interval + random.uniform(-self.flicker_variance, self.flicker_variance)
+
+            # Check if current flicker should end
+            if self.show_flicker and self.flicker_timer >= self.next_flicker_time - self.flicker_duration:
+                self.show_flicker = False
+
+        # Check proximity to door and flash
         self.check_door_proximity()
+        self.check_flash_proximity()
 
     def render(self, screen):
         # Draw background
@@ -272,6 +390,29 @@ class FieldState(GameState):
         # Draw bullets
         for bullet in self.bullets:
             bullet.render(screen)
+
+        # Draw flickering purple light effect
+        if not self.flash_discovered and self.show_flicker:
+            # Calculate alpha based on intensity for subtle effect
+            base_alpha = int(80 * self.flicker_intensity)  # Very subtle
+
+            # Purple color variations
+            purple_base = (120, 80, 150)  # Muted purple
+            purple_bright = (160, 120, 200)  # Slightly brighter purple
+
+            # Create subtle glow effect with multiple circles
+            for i, radius in enumerate([8, 6, 4, 2]):
+                alpha = max(20, base_alpha - (i * 15))
+                color = purple_base if i > 1 else purple_bright
+
+                # Create surface for alpha blending
+                glow_surface = pygame.Surface((radius * 2, radius * 2))
+                glow_surface.set_alpha(alpha)
+                glow_surface.fill(color)
+
+                # Draw as soft circle
+                pygame.draw.circle(glow_surface, color, (radius, radius), radius)
+                screen.blit(glow_surface, (self.flash_x - radius, self.flash_y - radius))
 
         # Draw protagonist (scaled down for display)
         protagonist_sprite = self.protagonist_animation.get_current_frame()
@@ -307,7 +448,10 @@ class FieldState(GameState):
         self.action_indicator.render(screen)
         self.interaction_prompt.render(screen)
 
+        # Draw quit overlay on top of everything
+        self.quit_overlay.render(screen)
+
     def cleanup(self):
         """Clean up resources when field state is destroyed"""
-        if hasattr(self, 'audio'):
-            self.audio.cleanup()
+        # Don't cleanup shared audio manager - it's managed by the game instance
+        pass

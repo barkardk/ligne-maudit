@@ -125,8 +125,8 @@ class Lightning:
             flash_surface.fill((255, 255, 255))
             surface.blit(flash_surface, (0, 0))
 
-            # Add debug print to verify lightning is triggering
-            print(f"Lightning flash! Intensity: {self.intensity:.2f}, Alpha: {flash_alpha}")
+            # Lightning flash debug (disabled)
+            # print(f"Lightning flash! Intensity: {self.intensity:.2f}, Alpha: {flash_alpha}")
 
 class WeatherSystem:
     def __init__(self, screen_width, screen_height):

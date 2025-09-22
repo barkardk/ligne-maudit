@@ -1,4 +1,5 @@
 import pygame
+import os
 from .game_state import GameState
 
 class TicTacToePuzzleState(GameState):
@@ -7,23 +8,26 @@ class TicTacToePuzzleState(GameState):
         self.screen_width = screen.get_width()
         self.screen_height = screen.get_height()
 
+        # Load door background
+        self.background = self.load_door_background()
+
         # Tic-tac-toe board (3x3 grid)
         self.board = [[None for _ in range(3)] for _ in range(3)]
 
-        # Puzzle solution (player needs to match this pattern)
+        # Puzzle solution (simpler pattern - just 3 X's in top row)
         self.solution = [
-            ['X', 'O', 'X'],
-            ['O', 'X', 'O'],
-            ['X', 'O', 'X']
+            ['X', 'X', 'X'],
+            [None, None, None],
+            [None, None, None]
         ]
 
         # Current player symbol
         self.current_symbol = 'X'
 
         # Grid settings
-        self.grid_size = 400
+        self.grid_size = 300
         self.cell_size = self.grid_size // 3
-        self.grid_x = (self.screen_width - self.grid_size) // 2
+        self.grid_x = self.screen_width // 4 - self.grid_size // 2  # Left side
         self.grid_y = (self.screen_height - self.grid_size) // 2
 
         # UI
@@ -35,6 +39,45 @@ class TicTacToePuzzleState(GameState):
         self.selected_cell = [0, 0]  # For keyboard navigation
 
         print("Tic-tac-toe puzzle loaded! Match the pattern to unlock the door.")
+
+    def load_door_background(self):
+        """Load door.png background or create fallback"""
+        try:
+            project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+            door_path = os.path.join(project_root, "assets", "images", "backgrounds", "door.png")
+
+            if os.path.exists(door_path):
+                background = pygame.image.load(door_path)
+                background = pygame.transform.scale(background, (self.screen_width, self.screen_height))
+                print(f"Loaded door background from: {door_path}")
+                return background
+            else:
+                print(f"door.png not found at {door_path}, creating fallback")
+                return self.create_fallback_background()
+
+        except Exception as e:
+            print(f"Error loading door background: {e}")
+            return self.create_fallback_background()
+
+    def create_fallback_background(self):
+        """Create a fallback door background"""
+        background = pygame.Surface((self.screen_width, self.screen_height))
+        background.fill((40, 30, 20))  # Dark brown
+
+        # Draw a large door outline
+        door_width = 300
+        door_height = 500
+        door_x = (self.screen_width - door_width) // 2
+        door_y = (self.screen_height - door_height) // 2
+
+        # Door frame
+        pygame.draw.rect(background, (80, 60, 40), (door_x - 10, door_y - 10, door_width + 20, door_height + 20))
+        # Door itself
+        pygame.draw.rect(background, (60, 45, 30), (door_x, door_y, door_width, door_height))
+        # Door panels
+        pygame.draw.rect(background, (50, 35, 20), (door_x + 20, door_y + 20, door_width - 40, door_height - 40), 3)
+
+        return background
 
     def handle_event(self, event):
         if event.type == pygame.KEYDOWN:
@@ -106,29 +149,30 @@ class TicTacToePuzzleState(GameState):
         pass
 
     def render(self, screen):
-        # Dark door background
-        screen.fill((40, 30, 20))
+        # Draw door background
+        screen.blit(self.background, (0, 0))
+
+        # Semi-transparent overlay for better text visibility
+        overlay = pygame.Surface((self.screen_width, self.screen_height))
+        overlay.set_alpha(100)
+        overlay.fill((0, 0, 0))
+        screen.blit(overlay, (0, 0))
 
         # Title
         title_text = self.font.render("Door Lock Puzzle", True, (255, 255, 255))
-        title_rect = title_text.get_rect(center=(self.screen_width // 2, 80))
+        title_rect = title_text.get_rect(center=(self.screen_width // 2, 50))
         screen.blit(title_text, title_rect)
 
-        # Instructions
-        if not self.puzzle_solved:
-            instruction_text = self.small_font.render("Match this pattern:", True, (200, 200, 200))
-            instruction_rect = instruction_text.get_rect(center=(self.screen_width // 2, 120))
-            screen.blit(instruction_text, instruction_rect)
+        # Draw main puzzle grid (center-left)
+        self.draw_grid(screen)
 
-            # Show solution pattern (smaller)
+        # Draw solution pattern on the right side
+        if not self.puzzle_solved:
             self.draw_solution_pattern(screen)
         else:
             success_text = self.font.render("DOOR UNLOCKED!", True, (0, 255, 0))
-            success_rect = success_text.get_rect(center=(self.screen_width // 2, 120))
+            success_rect = success_text.get_rect(center=(self.screen_width * 3 // 4, 200))
             screen.blit(success_text, success_rect)
-
-        # Draw main puzzle grid
-        self.draw_grid(screen)
 
         # Draw current symbol indicator
         symbol_text = self.small_font.render(f"Current symbol: {self.current_symbol}", True, (255, 255, 255))
@@ -140,28 +184,28 @@ class TicTacToePuzzleState(GameState):
             "Space/Enter: Place symbol",
             "Tab: Switch X/O",
             "R: Reset puzzle",
-            "Y: Return to door"
+            "ESC: Return to door"
         ]
 
         for i, control in enumerate(controls):
-            text = self.small_font.render(control, True, (150, 150, 150))
+            text = self.small_font.render(control, True, (200, 200, 200))
             screen.blit(text, (50, self.screen_height - 120 + i * 25))
 
     def draw_solution_pattern(self, screen):
-        """Draw the target pattern (prominent, at top)"""
-        pattern_size = 200  # Make it bigger
+        """Draw the target pattern on the right side"""
+        pattern_size = 150
         pattern_cell_size = pattern_size // 3
-        pattern_x = self.screen_width // 2 - pattern_size // 2
-        pattern_y = 120  # Move it higher up
+        pattern_x = self.screen_width * 3 // 4 - pattern_size // 2  # Right side
+        pattern_y = 150
 
-        # Draw bright background panel for the entire pattern area
-        panel_rect = pygame.Rect(pattern_x - 20, pattern_y - 60, pattern_size + 40, pattern_size + 80)
-        pygame.draw.rect(screen, (255, 255, 255), panel_rect)  # White background
-        pygame.draw.rect(screen, (255, 255, 0), panel_rect, 5)  # Yellow border
+        # Draw background panel
+        panel_rect = pygame.Rect(pattern_x - 15, pattern_y - 40, pattern_size + 30, pattern_size + 50)
+        pygame.draw.rect(screen, (255, 255, 255, 200), panel_rect)  # Semi-transparent white
+        pygame.draw.rect(screen, (255, 255, 0), panel_rect, 3)  # Yellow border
 
         # Draw title above the pattern
-        title_text = self.font.render("TARGET PATTERN", True, (0, 0, 0))  # Black text on white
-        title_rect = title_text.get_rect(center=(self.screen_width // 2, pattern_y - 30))
+        title_text = self.small_font.render("TARGET:", True, (0, 0, 0))
+        title_rect = title_text.get_rect(center=(pattern_x + pattern_size // 2, pattern_y - 20))
         screen.blit(title_text, title_rect)
 
         # Draw pattern grid
@@ -170,20 +214,18 @@ class TicTacToePuzzleState(GameState):
                 cell_x = pattern_x + col * pattern_cell_size
                 cell_y = pattern_y + row * pattern_cell_size
 
-                # Cell background - bright and clear
+                # Cell background
                 pygame.draw.rect(screen, (240, 240, 240),
                                (cell_x, cell_y, pattern_cell_size, pattern_cell_size))
                 pygame.draw.rect(screen, (0, 0, 0),
-                               (cell_x, cell_y, pattern_cell_size, pattern_cell_size), 3)
+                               (cell_x, cell_y, pattern_cell_size, pattern_cell_size), 2)
 
-                # Draw symbol with maximum contrast
+                # Draw symbol
                 symbol = self.solution[row][col]
                 if symbol:
-                    # Use very bold colors and larger font
                     color = (255, 0, 0) if symbol == 'X' else (0, 0, 255)  # Red X, Blue O
-                    # Use larger font for pattern
-                    big_font = pygame.font.Font(None, int(pattern_cell_size * 0.7))
-                    text = big_font.render(symbol, True, color)
+                    font = pygame.font.Font(None, int(pattern_cell_size * 0.6))
+                    text = font.render(symbol, True, color)
                     text_rect = text.get_rect(center=(cell_x + pattern_cell_size // 2,
                                                     cell_y + pattern_cell_size // 2))
                     screen.blit(text, text_rect)
