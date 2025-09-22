@@ -1,6 +1,6 @@
+-include llm.mk
 .PHONY: help venv install run clean test
 
-# Default target
 help:
 	@echo "Ligne Maudite - Available commands:"
 	@echo ""
@@ -9,7 +9,12 @@ help:
 	@echo "  make run      - Run the game (requires venv)"
 	@echo "  make clean    - Remove virtual environment"
 	@echo "  make test     - Run tests (when available)"
+	@echo ""
+	@echo "  make load     - Open all project files in aider with selected model"
+	@echo "                  (default: $(MODEL), override with MODEL=...)"
+	@echo "  make readme   - Ask aider to generate a comprehensive README.md"
 	@echo "  make help     - Show this help message"
+
 
 # Python version check
 PYTHON := $(shell command -v python3.14 2> /dev/null || command -v python3.13 2> /dev/null || command -v python3.12 2> /dev/null || command -v python3.11 2> /dev/null || command -v python3.10 2> /dev/null || command -v python3 2> /dev/null || command -v python 2> /dev/null)

@@ -141,6 +141,12 @@ class FieldState(GameState):
             if not self.audio.is_music_playing():
                 self.audio.play_music("forest_rain_music", loop=True, fade_in_ms=3000)
 
+        # Fade-in transition system
+        self.fade_in = True
+        self.fade_timer = 0.0
+        self.fade_duration = 1.0  # 1 second fade-in
+        self.fade_alpha = 255  # Start fully black, fade to transparent
+
         print("Field state initialized - Press arrow keys to move, F to shoot, C to toggle collision debug, SPACE to toggle audio!")
         print(f"Collision areas detected: {len(self.collision_map.collision_rects)}")
         print(f"Door located at: ({self.door_x}, {self.door_y})")
@@ -434,6 +440,18 @@ class FieldState(GameState):
         self.check_door_proximity()
         self.check_flash_proximity()
 
+        # Handle fade-in transition
+        if self.fade_in:
+            self.fade_timer += dt
+            if self.fade_timer <= self.fade_duration:
+                # Fade from black to transparent (255 to 0)
+                progress = self.fade_timer / self.fade_duration
+                self.fade_alpha = int(255 * (1.0 - progress))
+            else:
+                # Fade-in complete
+                self.fade_in = False
+                self.fade_alpha = 0
+
     def render(self, screen):
         # Draw background
         screen.blit(self.background, (0, 0))
@@ -530,6 +548,13 @@ class FieldState(GameState):
 
         # Draw quit overlay on top of everything
         self.quit_overlay.render(screen)
+
+        # Draw fade-in overlay if transitioning
+        if self.fade_in and self.fade_alpha > 0:
+            fade_surface = pygame.Surface((self.screen_width, self.screen_height))
+            fade_surface.set_alpha(self.fade_alpha)
+            fade_surface.fill((0, 0, 0))  # Black fade
+            screen.blit(fade_surface, (0, 0))
 
     def cleanup(self):
         """Clean up resources when field state is destroyed"""

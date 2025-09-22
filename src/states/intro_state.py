@@ -10,6 +10,7 @@ project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 sys.path.insert(0, project_root)
 
 from assets.sprites.protagonist import create_protagonist_animation_system
+from assets.backgrounds.collision_map import CollisionMap
 
 class IntroState(GameState):
     def __init__(self, screen, audio_manager=None):
@@ -25,6 +26,9 @@ class IntroState(GameState):
 
         # Load forest path background
         self.background = self.load_background()
+
+        # Create collision map for path restrictions
+        self.collision_map = self.create_forest_path_collision_map()
 
         # Create protagonist animation system
         self.protagonist_animation, self.using_sprite_sheet = create_protagonist_animation_system()
@@ -53,6 +57,9 @@ class IntroState(GameState):
                 print("Using 0.25x scale for very large sprites")
         else:
             self.character_display_scale = 1.0  # Default fallback
+
+        # Store base scale for perspective calculations
+        self.base_character_scale = self.character_display_scale
 
         # Set initial animation to face up (towards exit)
         self.protagonist_animation.play_animation('idle_up')
@@ -103,6 +110,12 @@ class IntroState(GameState):
         self.story_finished = False
         self.movement_locked = True  # Lock movement until story finishes
         self.transitioning = False  # Prevent repeated transitions
+
+        # Fade transition system
+        self.fade_transition = False
+        self.fade_timer = 0.0
+        self.fade_duration = 1.0  # 1 second fade
+        self.fade_alpha = 0  # Current fade alpha (0 = no fade, 255 = full black)
 
         # Use shared audio manager or create new one
         if audio_manager:
@@ -181,6 +194,65 @@ class IntroState(GameState):
 
         return background
 
+    def create_forest_path_collision_map(self):
+        """Create collision map to restrict movement to the middle path"""
+        collision_map = CollisionMap(self.screen_width, self.screen_height)
+
+        # Calculate path dimensions - path in the middle third of the lower half
+        # Split screen in half, then split lower half in three parts
+        lower_half_start = self.screen_height // 2
+        lower_third_width = self.screen_width // 3
+
+        # Path is in the middle third of the lower half
+        path_left = lower_third_width
+        path_right = 2 * lower_third_width
+        path_top = lower_half_start
+        path_bottom = self.screen_height
+
+        # Create collision blocks for left and right sides of lower half
+        # Left side - from left edge to path start
+        collision_map.add_collision_rect(0, path_top, path_left, path_bottom - path_top)
+
+        # Right side - from path end to right edge
+        collision_map.add_collision_rect(path_right, path_top, self.screen_width - path_right, path_bottom - path_top)
+
+        # Upper half - entire area above the middle line
+        collision_map.add_collision_rect(0, 0, self.screen_width, lower_half_start)
+
+        print(f"Forest path collision created:")
+        print(f"  Path area: x={path_left}-{path_right}, y={path_top}-{path_bottom}")
+        print(f"  Left block: (0, {path_top}, {path_left}, {path_bottom - path_top})")
+        print(f"  Right block: ({path_right}, {path_top}, {self.screen_width - path_right}, {path_bottom - path_top})")
+        print(f"  Upper block: (0, 0, {self.screen_width}, {lower_half_start})")
+
+        return collision_map
+
+    def calculate_perspective_scale(self):
+        """Calculate perspective scaling based on protagonist position"""
+        # Get position relative to screen
+        center_x = self.screen_width // 2
+        center_y = self.screen_height // 2
+
+        # Calculate distance from bottom of screen (0.0 = bottom, 1.0 = center)
+        # As she moves up (toward center), she should get smaller (going away)
+        # As she moves down (toward bottom), she should get larger (coming closer)
+        y_progress = (self.screen_height - self.protagonist_y) / (self.screen_height / 2)
+        y_progress = max(0.0, min(1.0, y_progress))  # Clamp between 0 and 1
+
+        # Scale from 1.0 (full size at bottom) to 0.6 (60% size at center)
+        perspective_multiplier = 1.0 - (y_progress * 0.4)  # Goes from 1.0 to 0.6
+
+        # Apply perspective to base scale
+        self.character_display_scale = self.base_character_scale * perspective_multiplier
+
+        # Debug info
+        if hasattr(self, 'debug_counter'):
+            self.debug_counter += 1
+            if self.debug_counter % 60 == 0:  # Print every second at 60fps
+                print(f"Y: {self.protagonist_y}, Progress: {y_progress:.2f}, Scale: {perspective_multiplier:.2f}")
+        else:
+            self.debug_counter = 0
+
     def check_exit_collision(self):
         """Check if protagonist reached the exit area"""
         # Get protagonist bounds
@@ -214,6 +286,9 @@ class IntroState(GameState):
                 self.story_finished = True
                 self.movement_locked = False
                 print("Text hidden - Movement unlocked!")
+            elif event.key == pygame.K_c:
+                # Toggle collision debug mode
+                self.collision_map.toggle_debug()
 
         return None
 
@@ -236,6 +311,9 @@ class IntroState(GameState):
         self.is_moving = False
 
         if not self.movement_locked:
+            # Calculate perspective scaling based on current position
+            self.calculate_perspective_scale()
+
             # Handle movement
             old_x = self.protagonist_x
             old_y = self.protagonist_y
@@ -273,8 +351,10 @@ class IntroState(GameState):
             new_x = max(0, min(self.screen_width - sprite_width, new_x))
             new_y = max(0, min(self.screen_height - sprite_height, new_y))
 
-            self.protagonist_x = new_x
-            self.protagonist_y = new_y
+            # Check collision and get valid position
+            self.protagonist_x, self.protagonist_y = self.collision_map.get_valid_position(
+                old_x, old_y, new_x, new_y, sprite_width, sprite_height
+            )
 
             # Handle animation based on movement
             if self.is_moving and movement_direction:
@@ -287,12 +367,14 @@ class IntroState(GameState):
                 self.protagonist_animation.play_animation(f'idle_{self.last_facing_direction}')
 
             # Check if protagonist reached the exit
-            if self.check_exit_collision() and not self.transitioning:
-                print("Exit collision detected - transitioning to Maginot Line!")
+            if self.check_exit_collision() and not self.transitioning and not self.fade_transition:
+                print("Exit collision detected - starting fade transition to Maginot Line!")
                 self.transitioning = True
-                return "field"
+                self.fade_transition = True
+                self.fade_timer = 0.0
         else:
-            # Movement locked - just play idle animation
+            # Movement locked - calculate perspective and play idle animation
+            self.calculate_perspective_scale()
             self.protagonist_animation.play_animation(f'idle_{self.last_facing_direction}')
 
         # Update animation system
@@ -300,6 +382,19 @@ class IntroState(GameState):
 
         # Update weather system
         self.weather.update(dt)
+
+        # Handle fade transition
+        if self.fade_transition:
+            self.fade_timer += dt
+            # Calculate fade alpha (fade to black first, then complete transition)
+            if self.fade_timer <= self.fade_duration:
+                # Fade to black (0 to 255)
+                progress = self.fade_timer / self.fade_duration
+                self.fade_alpha = int(255 * progress)
+            else:
+                # Fade complete - transition to next scene
+                print("Fade transition complete - switching to Maginot Line!")
+                return "field"
 
         return None
 
@@ -320,6 +415,9 @@ class IntroState(GameState):
 
         # Draw weather effects (rain and lightning over everything)
         self.weather.draw(screen)
+
+        # Draw collision debug if enabled
+        self.collision_map.render_debug(screen)
 
         # Draw story text if visible
         if self.text_visible:
@@ -362,14 +460,14 @@ class IntroState(GameState):
         # Draw instructions
         if self.movement_locked:
             if self.text_visible:
-                instructions = "Story auto-scrolling... • ENTER Skip story • SPACE Toggle audio • H Hide text"
+                instructions = "Story auto-scrolling... • ENTER Skip story • SPACE Toggle audio • H Hide text • C Debug"
             else:
-                instructions = "Story playing... • ENTER Skip story • SPACE Toggle audio • H Show text"
+                instructions = "Story playing... • ENTER Skip story • SPACE Toggle audio • H Show text • C Debug"
         else:
             if self.text_visible:
-                instructions = "Walk north to Maginot Line • SPACE Toggle audio • H Hide text • ESC Skip"
+                instructions = "Walk north to Maginot Line • SPACE Toggle audio • H Hide text • C Debug • ESC Skip"
             else:
-                instructions = "Walk north to Maginot Line • SPACE Toggle audio • H Show story • ESC Skip"
+                instructions = "Walk north to Maginot Line • SPACE Toggle audio • H Show story • C Debug • ESC Skip"
 
         instruction_font = pygame.font.Font(None, 24)
         instruction_text = instruction_font.render(instructions, True, (255, 255, 255))
@@ -380,6 +478,13 @@ class IntroState(GameState):
         bg_rect = instruction_rect.inflate(20, 10)
         pygame.draw.rect(screen, (0, 0, 0, 180), bg_rect)
         screen.blit(instruction_text, instruction_rect)
+
+        # Draw fade overlay if transitioning
+        if self.fade_transition and self.fade_alpha > 0:
+            fade_surface = pygame.Surface((self.screen_width, self.screen_height))
+            fade_surface.set_alpha(self.fade_alpha)
+            fade_surface.fill((0, 0, 0))  # Black fade
+            screen.blit(fade_surface, (0, 0))
 
     def cleanup(self):
         """Clean up resources when intro state is destroyed"""
