@@ -105,16 +105,16 @@ class BehindBunkerState(GameState):
         self.return_collision_box_blue_height = int(60 * 1.25)  # 75px (25% taller)
         self.near_return_collision_box_blue = False
 
-        # Dragonteeth collision box at lowest center edge
-        self.dragonteeth_collision_x = self.screen_width // 2 - 40  # Center horizontally
-        self.dragonteeth_collision_y = self.screen_height - 70  # Bottom edge
-        self.dragonteeth_collision_width = 80
-        self.dragonteeth_collision_height = 60
+        # Dragonteeth collision box - at bottom of image, 80px left of center
+        self.dragonteeth_collision_x = self.screen_width // 2 - 60 - 80  # 80px left of center
+        self.dragonteeth_collision_y = self.screen_height - 60  # Very bottom of image
+        self.dragonteeth_collision_width = 120  # Wide for easier access
+        self.dragonteeth_collision_height = 60   # Tall enough to detect collision
         self.near_dragonteeth_collision = False
 
         # Transition cooldown to prevent endless loops
         self.transition_cooldown = 0.0
-        self.transition_cooldown_duration = 10.0  # 10 seconds before allowing another transition
+        self.transition_cooldown_duration = 2.0  # 2 seconds before allowing another transition
 
         # Quit overlay
         self.quit_overlay = QuitOverlay()
@@ -151,7 +151,7 @@ class BehindBunkerState(GameState):
         # Fade-out transition system
         self.fade_out = False
         self.fade_out_timer = 0.0
-        self.fade_out_duration = 1.0  # 1 second fade-out
+        self.fade_out_duration = 0.1  # Fast fade-out
         self.next_scene = None
 
         print("Behind bunker state initialized - Explore behind the Maginot Line!")
@@ -299,12 +299,13 @@ class BehindBunkerState(GameState):
             self.near_return_collision_box_blue = False
 
     def check_dragonteeth_collision_box(self):
-        """Check if protagonist is in the dragonteeth transition collision box"""
+        """Check if protagonist is in the dragonteeth transition collision box - fixed for down arrow access"""
         if self.fade_out or self.transitioning:
             return
 
         # Check transition cooldown to prevent endless loops
         if self.transition_cooldown > 0:
+            print(f"Dragonteeth collision check blocked by cooldown: {self.transition_cooldown:.1f}s remaining")
             return
 
         # Get protagonist center
@@ -319,18 +320,24 @@ class BehindBunkerState(GameState):
         protagonist_center_x = self.protagonist_x + sprite_width // 2
         protagonist_center_y = self.protagonist_y + sprite_height // 2
 
-        # Check dragonteeth collision box - automatically trigger transition when protagonist enters
+        # Debug: Always show position when near the bottom of the screen
+        if protagonist_center_y > self.screen_height - 200:
+            print(f"Protagonist at ({protagonist_center_x:.1f}, {protagonist_center_y:.1f})")
+            print(f"Dragonteeth box: x={self.dragonteeth_collision_x}-{self.dragonteeth_collision_x + self.dragonteeth_collision_width}, y={self.dragonteeth_collision_y}-{self.dragonteeth_collision_y + self.dragonteeth_collision_height}")
+
+        # Check dragonteeth collision box
         if (self.dragonteeth_collision_x <= protagonist_center_x <= self.dragonteeth_collision_x + self.dragonteeth_collision_width and
             self.dragonteeth_collision_y <= protagonist_center_y <= self.dragonteeth_collision_y + self.dragonteeth_collision_height):
             if not self.near_dragonteeth_collision:
-                print("Entering dragonteeth collision box - transitioning to scene 4")
+                print("SUCCESS: Entering dragonteeth collision box - transitioning to scene 4")
                 self.near_dragonteeth_collision = True
+                # Automatically start transition to scene 4
                 self.start_fade_transition("dragonteeth")
         else:
             self.near_dragonteeth_collision = False
 
     def start_fade_transition(self, next_scene):
-        """Start fade out transition to next scene"""
+        """Start fade out transition to next scene - simplified version"""
         if self.fade_out or self.transitioning:
             return
 
@@ -384,17 +391,17 @@ class BehindBunkerState(GameState):
                 self.fade_in = False
                 self.fade_alpha = 0
 
-        # Handle fade-out transition
+        # Handle fade-out transition - simplified
         if self.fade_out:
             self.fade_out_timer += dt
-            if self.fade_out_timer <= self.fade_out_duration:
-                # Fade from transparent to black (0 to 255)
-                progress = self.fade_out_timer / self.fade_out_duration
-                self.fade_alpha = int(255 * progress)
-            else:
+            if self.fade_out_timer >= self.fade_out_duration:
                 # Fade-out complete - transition to next scene
                 print(f"Fade out complete - transitioning to {self.next_scene}")
                 return self.next_scene
+            else:
+                # Fade from transparent to black (0 to 255)
+                progress = self.fade_out_timer / self.fade_out_duration
+                self.fade_alpha = int(255 * progress)
 
         # Update transition cooldown
         if self.transition_cooldown > 0:
@@ -562,22 +569,7 @@ class BehindBunkerState(GameState):
                                                self.return_collision_box_blue_width, self.return_collision_box_blue_height)
         # Blue collision box is invisible
 
-        # Draw dragonteeth collision box for visibility
-        dragonteeth_collision_rect = pygame.Rect(self.dragonteeth_collision_x, self.dragonteeth_collision_y,
-                                               self.dragonteeth_collision_width, self.dragonteeth_collision_height)
-        pygame.draw.rect(screen, (255, 165, 0), dragonteeth_collision_rect)  # Orange box
-
-        # Draw dragonteeth collision box label
-        font = pygame.font.Font(None, 24)
-        label_text = font.render("SCENE 4", True, (255, 255, 255))
-        label_rect = label_text.get_rect()
-        label_rect.centerx = self.dragonteeth_collision_x + self.dragonteeth_collision_width // 2
-        label_rect.bottom = self.dragonteeth_collision_y - 5
-
-        # Draw label background
-        label_bg_rect = label_rect.inflate(10, 5)
-        pygame.draw.rect(screen, (0, 0, 0, 180), label_bg_rect)
-        screen.blit(label_text, label_rect)
+        # Dragonteeth collision box is invisible (collision only)
 
         # Draw return collision box hint
         if self.near_return_collision_box_red or self.near_return_collision_box_blue:

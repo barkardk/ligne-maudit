@@ -83,8 +83,13 @@ class Game:
                 self.state_manager.pop_state()
         elif new_state_name == "dragonteeth":
             # Transition to dragonteeth scene (scene 4)
+            import time
+            print(f"[{time.time():.2f}] Creating DragonteethState...")
             dragonteeth_state = DragonteethState(self.display_surface, self.audio_manager)
+            print(f"[{time.time():.2f}] DragonteethState created, changing state...")
             self.state_manager.change_state(dragonteeth_state)
+            print(f"[{time.time():.2f}] State changed to dragonteeth")
+            print(f"[{time.time():.2f}] First render should happen next frame...")
         elif new_state_name in ["behind_bunker_left", "behind_bunker_right", "behind_bunker_red", "behind_bunker_blue"]:
             # Transition to behind bunker scene
             behind_bunker_state = BehindBunkerState(self.display_surface, self.audio_manager)
