@@ -46,3 +46,4 @@ screenshots/
 
 # AI prompts (keep private)
 prompts/
+.aider*

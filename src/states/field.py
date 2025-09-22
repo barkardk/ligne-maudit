@@ -104,14 +104,14 @@ class FieldState(GameState):
         self.flash_has_key = True  # Initially has key
         self.flash_discovered = False  # Track if flash has been discovered
 
-        # Flickering light effect
+        # Realistic flickering light effect
         self.flicker_timer = 0.0
-        self.flicker_base_interval = 0.8  # Base flicker rate
-        self.flicker_variance = 0.6  # Random variance for natural flickering
-        self.flicker_duration = 0.1  # Very brief flicker
-        self.show_flicker = False
-        self.flicker_intensity = 0.0  # Intensity of current flicker
-        self.next_flicker_time = 0.0
+        self.flicker_sequence = []  # Queue of flicker events
+        self.current_flicker_intensity = 0.4  # Higher base dim glow for better visibility
+        self.flicker_target_intensity = 0.2
+        self.flicker_fade_speed = 8.0  # How fast intensity changes
+        self.next_event_time = random.uniform(0.5, 2.0)
+        self.is_white_flash = False
 
         # Get door position - lower third center
         self.door_x = 467  # 25 pixels to the right
@@ -193,6 +193,52 @@ class FieldState(GameState):
         self.flash_has_key = False
         self.flash_discovered = True
         print("You took the key! The flash area is now inactive.")
+
+    def generate_flicker_sequence(self):
+        """Generate a realistic sequence of flicker events"""
+        current_time = self.flicker_timer
+
+        # Choose type of flicker pattern
+        pattern_type = random.choice(['gentle', 'stutter', 'surge', 'white_flash'])
+
+        if pattern_type == 'gentle':
+            # Gentle brightness change (more visible)
+            self.flicker_sequence = [
+                {'time': current_time + 0.1, 'intensity': random.uniform(0.6, 0.9)},
+                {'time': current_time + 0.8, 'intensity': random.uniform(0.2, 0.4)}
+            ]
+            self.next_event_time = current_time + random.uniform(1.5, 3.0)  # More frequent
+
+        elif pattern_type == 'stutter':
+            # Quick stuttering flickers (more visible)
+            self.flicker_sequence = [
+                {'time': current_time + 0.05, 'intensity': 0.9},
+                {'time': current_time + 0.15, 'intensity': 0.2},
+                {'time': current_time + 0.25, 'intensity': 0.8},
+                {'time': current_time + 0.35, 'intensity': 0.3},
+                {'time': current_time + 0.45, 'intensity': 0.6}
+            ]
+            self.next_event_time = current_time + random.uniform(1.0, 2.5)  # More frequent
+
+        elif pattern_type == 'surge':
+            # Gradual buildup and fade (more visible)
+            self.flicker_sequence = [
+                {'time': current_time + 0.2, 'intensity': 0.6},
+                {'time': current_time + 0.5, 'intensity': 1.0},
+                {'time': current_time + 1.0, 'intensity': 0.7},
+                {'time': current_time + 1.5, 'intensity': 0.3}
+            ]
+            self.next_event_time = current_time + random.uniform(2.0, 4.5)  # More frequent
+
+        elif pattern_type == 'white_flash':
+            # Bright white flash followed by dimming (more visible)
+            self.flicker_sequence = [
+                {'time': current_time + 0.02, 'intensity': 1.0, 'white_flash': True},
+                {'time': current_time + 0.1, 'intensity': 0.8},
+                {'time': current_time + 0.5, 'intensity': 0.4},
+                {'time': current_time + 1.0, 'intensity': 0.2}
+            ]
+            self.next_event_time = current_time + random.uniform(3.0, 6.0)  # More frequent
 
     def check_door_proximity(self):
         """Check if protagonist is near the door and handle speech bubble"""
@@ -360,21 +406,29 @@ class FieldState(GameState):
         # Update action indicator animation
         self.action_indicator.update(dt)
 
-        # Update flickering light effect
+        # Update realistic flickering light effect
         if not self.flash_discovered:
             self.flicker_timer += dt
 
-            # Check if it's time for next flicker
-            if self.flicker_timer >= self.next_flicker_time:
-                # Start new flicker
-                self.show_flicker = True
-                self.flicker_intensity = random.uniform(0.3, 1.0)  # Random intensity
-                # Set next flicker time with variance
-                self.next_flicker_time = self.flicker_timer + self.flicker_base_interval + random.uniform(-self.flicker_variance, self.flicker_variance)
+            # Check if it's time for next flicker event
+            if self.flicker_timer >= self.next_event_time:
+                self.generate_flicker_sequence()
 
-            # Check if current flicker should end
-            if self.show_flicker and self.flicker_timer >= self.next_flicker_time - self.flicker_duration:
-                self.show_flicker = False
+            # Process current flicker sequence
+            if self.flicker_sequence:
+                event = self.flicker_sequence[0]
+                if self.flicker_timer >= event['time']:
+                    self.flicker_target_intensity = event['intensity']
+                    self.is_white_flash = event.get('white_flash', False)
+                    self.flicker_sequence.pop(0)
+
+            # Smoothly transition current intensity toward target
+            intensity_diff = self.flicker_target_intensity - self.current_flicker_intensity
+            if abs(intensity_diff) > 0.01:
+                self.current_flicker_intensity += intensity_diff * self.flicker_fade_speed * dt
+            else:
+                self.current_flicker_intensity = self.flicker_target_intensity
+                self.is_white_flash = False  # White flash only lasts one frame
 
         # Check proximity to door and flash
         self.check_door_proximity()
@@ -391,28 +445,54 @@ class FieldState(GameState):
         for bullet in self.bullets:
             bullet.render(screen)
 
-        # Draw flickering purple light effect
-        if not self.flash_discovered and self.show_flicker:
-            # Calculate alpha based on intensity for subtle effect
-            base_alpha = int(80 * self.flicker_intensity)  # Very subtle
+        # Draw realistic flickering light effect (more visible and sharper)
+        if not self.flash_discovered and self.current_flicker_intensity > 0.02:  # Lower threshold for visibility
+            # Boost intensity for better visibility
+            intensity = min(1.0, self.current_flicker_intensity * 1.5)
 
-            # Purple color variations
-            purple_base = (120, 80, 150)  # Muted purple
-            purple_bright = (160, 120, 200)  # Slightly brighter purple
+            # Choose colors based on white flash state
+            if self.is_white_flash:
+                # Bright white flash with blue-white tint
+                core_color = (255, 255, 255)
+                outer_color = (220, 240, 255)
+                glow_color = (180, 200, 255)
+            else:
+                # Brighter purple magical light for better visibility
+                core_color = (220, 150, 255)
+                outer_color = (160, 100, 240)
+                glow_color = (120, 80, 200)
 
-            # Create subtle glow effect with multiple circles
-            for i, radius in enumerate([8, 6, 4, 2]):
-                alpha = max(20, base_alpha - (i * 15))
-                color = purple_base if i > 1 else purple_bright
+            # Create realistic light falloff with multiple layers (larger radius)
+            max_radius = 25  # Increased from 15 for better visibility
+            layers = [
+                {'radius': max_radius, 'color': glow_color, 'alpha_mult': 0.25},      # More visible outer glow
+                {'radius': max_radius * 0.7, 'color': outer_color, 'alpha_mult': 0.45}, # More visible mid layer
+                {'radius': max_radius * 0.4, 'color': core_color, 'alpha_mult': 0.75},  # Brighter core
+                {'radius': max_radius * 0.2, 'color': core_color, 'alpha_mult': 1.0}    # Full intensity center
+            ]
 
-                # Create surface for alpha blending
-                glow_surface = pygame.Surface((radius * 2, radius * 2))
-                glow_surface.set_alpha(alpha)
-                glow_surface.fill(color)
+            for layer in layers:
+                radius = int(layer['radius'] * intensity)
+                if radius > 1:  # Lower minimum radius
+                    alpha = int(255 * intensity * layer['alpha_mult'])
+                    alpha = min(255, max(0, alpha))
 
-                # Draw as soft circle
-                pygame.draw.circle(glow_surface, color, (radius, radius), radius)
-                screen.blit(glow_surface, (self.flash_x - radius, self.flash_y - radius))
+                    # Create surface for proper alpha blending
+                    light_surface = pygame.Surface((radius * 4, radius * 4))
+                    light_surface.set_colorkey((0, 0, 0))  # Make black transparent
+                    light_surface.set_alpha(alpha)
+
+                    # Draw sharper gradient circle for more defined light
+                    for i in range(radius, 0, -2):  # Step by 2 for sharper edges
+                        circle_alpha = int((i / radius) * 255)
+                        falloff = (i / radius) ** 0.7  # Sharper falloff curve
+                        color_with_alpha = tuple(int(c * falloff) for c in layer['color'])
+                        pygame.draw.circle(light_surface, color_with_alpha,
+                                         (radius * 2, radius * 2), i)
+
+                    # Blit to screen
+                    screen.blit(light_surface,
+                              (self.flash_x - radius * 2, self.flash_y - radius * 2))
 
         # Draw protagonist (scaled down for display)
         protagonist_sprite = self.protagonist_animation.get_current_frame()

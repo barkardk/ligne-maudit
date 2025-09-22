@@ -30,9 +30,9 @@ class BoxState(GameState):
 
             # Choose the right background based on whether box has key
             if self.box_has_key:
-                bg_path = os.path.join(project_root, "assets", "images", "sprites", "inside_box.png")
+                bg_path = os.path.join(project_root, "assets", "images", "backgrounds", "inside_box.png")
             else:
-                bg_path = os.path.join(project_root, "assets", "images", "sprites", "inside_empty_box.png")
+                bg_path = os.path.join(project_root, "assets", "images", "backgrounds", "inside_empty_box.png")
 
             if os.path.exists(bg_path):
                 background = pygame.image.load(bg_path)
@@ -107,50 +107,15 @@ class BoxState(GameState):
         pass
 
     def render(self, screen):
-        # Draw background
+        # Draw background image (should be visible now)
         screen.blit(self.background, (0, 0))
 
-        # Create overlay for text and UI
-        overlay = pygame.Surface((self.screen_width, self.screen_height))
-        overlay.set_alpha(200)
-        overlay.fill((0, 0, 0))
-        screen.blit(overlay, (0, 0))
-
-        # Draw the box interior again on top of overlay (so it shows through)
-        box_rect = pygame.Rect(self.screen_width // 4, self.screen_height // 4,
-                              self.screen_width // 2, self.screen_height // 2)
-
-        # Box interior
-        pygame.draw.rect(screen, (80, 70, 60), box_rect)
-        pygame.draw.rect(screen, (100, 90, 80), box_rect, 5)
-
-        # Inner shadow
-        inner_box = pygame.Rect(box_rect.x + 10, box_rect.y + 10,
-                               box_rect.width - 20, box_rect.height - 20)
-        pygame.draw.rect(screen, (60, 50, 40), inner_box)
-
         if self.box_has_key and self.awaiting_response:
-            # Draw key in box
-            key_x = box_rect.centerx
-            key_y = box_rect.centery - 30
-
-            # Key shaft
-            key_rect = pygame.Rect(key_x - 25, key_y - 3, 40, 6)
-            pygame.draw.rect(screen, (255, 215, 0), key_rect)  # Gold color
-
-            # Key head
-            pygame.draw.circle(screen, (255, 215, 0), (key_x - 20, key_y), 10)
-            pygame.draw.circle(screen, (60, 50, 40), (key_x - 20, key_y), 5)
-
-            # Key teeth
-            pygame.draw.rect(screen, (255, 215, 0), (key_x + 10, key_y - 3, 3, 5))
-            pygame.draw.rect(screen, (255, 215, 0), (key_x + 15, key_y - 3, 2, 3))
-
-            # Text asking about taking key
+            # Text asking about taking key (positioned at bottom of screen)
             question_text = self.font_medium.render("Take the key?", True, (255, 255, 255))
             question_rect = question_text.get_rect()
             question_rect.centerx = self.screen_width // 2
-            question_rect.y = box_rect.bottom + 50
+            question_rect.y = self.screen_height - 150
 
             # Add background for text
             bg_rect = question_rect.inflate(20, 10)
@@ -161,7 +126,7 @@ class BoxState(GameState):
             instruction_text = self.font_small.render("Y - Yes    N - No    ESC - Leave", True, (200, 200, 200))
             instruction_rect = instruction_text.get_rect()
             instruction_rect.centerx = self.screen_width // 2
-            instruction_rect.y = question_rect.bottom + 30
+            instruction_rect.y = question_rect.bottom + 20
 
             # Add background for instruction
             inst_bg_rect = instruction_rect.inflate(20, 10)
@@ -171,7 +136,7 @@ class BoxState(GameState):
         else:  # Empty or key taken
             empty_text = self.font_medium.render("Empty.", True, (255, 255, 255))
             empty_rect = empty_text.get_rect()
-            empty_rect.center = (self.screen_width // 2, box_rect.centery)
+            empty_rect.center = (self.screen_width // 2, self.screen_height - 150)
 
             # Add background for text
             bg_rect = empty_rect.inflate(20, 10)
@@ -181,7 +146,7 @@ class BoxState(GameState):
             exit_text = self.font_small.render("ESC - Leave", True, (200, 200, 200))
             exit_rect = exit_text.get_rect()
             exit_rect.centerx = self.screen_width // 2
-            exit_rect.y = empty_rect.bottom + 30
+            exit_rect.y = empty_rect.bottom + 20
 
             # Add background for instruction
             exit_bg_rect = exit_rect.inflate(20, 10)
