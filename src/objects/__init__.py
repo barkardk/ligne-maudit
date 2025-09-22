@@ -1,0 +1,1 @@
+"""Objects package for game objects like animated rocks, etc."""

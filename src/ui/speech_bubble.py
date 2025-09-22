@@ -1,14 +1,14 @@
 import pygame
 
 class SpeechBubble:
-    def __init__(self, x, y, width=80, height=40):
+    def __init__(self, x, y, width=200, height=60):
         self.x = x
         self.y = y
         self.width = width
         self.height = height
         self.visible = False
         self.text = ""
-        self.font = pygame.font.Font(None, 28)
+        self.font = pygame.font.Font(None, 24)  # Smaller font for longer text
 
     def show(self, text="!", x=None, y=None):
         """Show speech bubble with text at position"""
@@ -47,12 +47,36 @@ class SpeechBubble:
         pygame.draw.polygon(screen, bubble_color, tail_points)
         pygame.draw.polygon(screen, border_color, tail_points, 3)
 
-        # Text (centered in bubble)
+        # Text (centered in bubble) - handle longer text
         if self.text:
-            text_surface = self.font.render(self.text, True, text_color)
-            text_rect = text_surface.get_rect()
-            text_rect.center = (self.x + self.width // 2, self.y + self.height // 2)
-            screen.blit(text_surface, text_rect)
+            # Split text into multiple lines if needed
+            words = self.text.split(' ')
+            lines = []
+            current_line = ""
+
+            for word in words:
+                test_line = current_line + (" " if current_line else "") + word
+                test_surface = self.font.render(test_line, True, text_color)
+                if test_surface.get_width() <= self.width - 20:  # 20px padding
+                    current_line = test_line
+                else:
+                    if current_line:
+                        lines.append(current_line)
+                    current_line = word
+
+            if current_line:
+                lines.append(current_line)
+
+            # Render each line
+            total_height = len(lines) * self.font.get_height()
+            start_y = self.y + (self.height - total_height) // 2
+
+            for i, line in enumerate(lines):
+                text_surface = self.font.render(line, True, (0, 0, 0))  # Black text for readability
+                text_rect = text_surface.get_rect()
+                text_rect.centerx = self.x + self.width // 2
+                text_rect.y = start_y + i * self.font.get_height()
+                screen.blit(text_surface, text_rect)
 
 class InteractionPrompt:
     def __init__(self):
@@ -76,8 +100,8 @@ class InteractionPrompt:
         pygame.draw.rect(screen, (0, 0, 0, 180), panel_rect)
         pygame.draw.rect(screen, (255, 255, 255), panel_rect, 2)
 
-        # Instructions - ENTER key now
-        instruction = "Press ENTER to investigate"
+        # Instructions - context sensitive
+        instruction = "Press ENTER to continue | Y - Yes | N - No"
 
         text_surface = self.font.render(instruction, True, (255, 255, 255))
         y_pos = screen.get_height() - panel_height + 25  # Center vertically

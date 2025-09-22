@@ -4,6 +4,7 @@ import os
 from .game_state import GameState
 from ..audio.audio_manager import AudioManager
 from ..effects.weather_system import WeatherSystem
+from ..ui.quit_overlay import QuitOverlay
 
 # Add the project root to the path to import assets
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
@@ -18,9 +19,9 @@ class IntroState(GameState):
         self.screen_width = screen.get_width()
         self.screen_height = screen.get_height()
 
-        # Exit collision box - middle center (define early for background creation)
+        # Exit collision box - lower than middle center (define early for background creation)
         self.exit_x = (self.screen_width // 2) - 10  # Center horizontally
-        self.exit_y = (self.screen_height // 2) - 10  # Middle of screen
+        self.exit_y = (self.screen_height // 2) + 90  # 100px lower than middle of screen
         self.exit_width = 20
         self.exit_height = 20
 
@@ -99,14 +100,44 @@ class IntroState(GameState):
         ]
 
         # Auto-scrolling story system
-        self.text_scroll = 0  # Current scroll position
-        self.max_scroll = max(0, len(self.story_text) - 8)  # Max lines that can be scrolled
-        self.text_font = pygame.font.Font(None, 28)
+        self.text_scroll = 0.0  # Current scroll position (now float for smooth scrolling)
+        self.scroll_speed = 20.0  # Pixels per second scroll speed (natural reading speed)
+        self.line_height = 32
+        self.visible_lines = 12  # Number of lines visible at once
+        self.max_scroll = max(0, len(self.story_text) * self.line_height - (self.visible_lines * self.line_height))
+
+        # Try to load a steampunk-style font, fallback to default
+        try:
+            # Try common steampunk/serif fonts that might be available
+            font_candidates = [
+                'Times New Roman',  # Classic serif
+                'Georgia',         # Web-safe serif
+                'Garamond',        # Classic book font
+                'Book Antiqua',    # Victorian-style
+                'Palatino',        # Elegant serif
+            ]
+            self.text_font = None
+            for font_name in font_candidates:
+                try:
+                    self.text_font = pygame.font.SysFont(font_name, 22)  # Finer font size
+                    print(f"Using font: {font_name}")
+                    break
+                except:
+                    continue
+
+            if self.text_font is None:
+                # Fallback to default pygame font, but make it smaller and more elegant
+                self.text_font = pygame.font.Font(None, 22)
+                print("Using default pygame font")
+
+        except:
+            self.text_font = pygame.font.Font(None, 22)
+
         self.text_visible = True
 
-        # Auto-scroll timing
+        # Auto-scroll timing - removed discrete timing, now continuous
         self.auto_scroll_timer = 0.0
-        self.auto_scroll_delay = 3.0  # 3 seconds per section
+        self.auto_scroll_delay = 2.0  # 2 second delay before starting scroll
         self.story_finished = False
         self.movement_locked = True  # Lock movement until story finishes
         self.transitioning = False  # Prevent repeated transitions
@@ -116,6 +147,12 @@ class IntroState(GameState):
         self.fade_timer = 0.0
         self.fade_duration = 1.0  # 1 second fade
         self.fade_alpha = 0  # Current fade alpha (0 = no fade, 255 = full black)
+
+        # Text fade-out system
+        self.text_fade_out = False
+        self.text_fade_timer = 0.0
+        self.text_fade_duration = 2.0  # 2 second fade out
+        self.text_alpha = 255  # Text alpha (255 = fully visible, 0 = invisible)
 
         # Use shared audio manager or create new one
         if audio_manager:
@@ -131,6 +168,9 @@ class IntroState(GameState):
 
         # Create weather system
         self.weather = WeatherSystem(self.screen_width, self.screen_height)
+
+        # Quit overlay
+        self.quit_overlay = QuitOverlay()
 
         print("Intro state initialized - Walk north to reach the Maginot Line!")
         print(f"Exit area at: ({self.exit_x}, {self.exit_y}) - {self.exit_width}x{self.exit_height}")
@@ -270,10 +310,23 @@ class IntroState(GameState):
         return protagonist_rect.colliderect(exit_rect)
 
     def handle_event(self, event):
+        # Handle quit overlay input first if it's visible
+        if self.quit_overlay.is_visible():
+            result = self.quit_overlay.handle_input(event)
+            if result == "quit":
+                # Signal the game to quit
+                pygame.event.post(pygame.event.Event(pygame.QUIT))
+                return None
+            elif result == "resume":
+                # Resume game (overlay already hidden)
+                return None
+            # If quit overlay is visible, don't handle other inputs
+            return None
+
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
-                # Skip intro and go to main scene
-                return "field"
+                # Show quit overlay instead of immediately going to field
+                self.quit_overlay.show()
             elif event.key == pygame.K_h:
                 # Toggle text visibility
                 self.text_visible = not self.text_visible
@@ -293,18 +346,39 @@ class IntroState(GameState):
         return None
 
     def update(self, dt):
+        # Don't update game logic if quit overlay is visible (pause the game)
+        if self.quit_overlay.is_visible():
+            return
+
         # Handle auto-scrolling story
         if not self.story_finished:
             self.auto_scroll_timer += dt
             if self.auto_scroll_timer >= self.auto_scroll_delay:
-                self.auto_scroll_timer = 0.0
+                # Start smooth scrolling
                 if self.text_scroll < self.max_scroll:
-                    self.text_scroll += 1
-                else:
-                    # Story finished scrolling
-                    self.story_finished = True
-                    self.movement_locked = False
-                    print("Story finished - Movement unlocked!")
+                    self.text_scroll += self.scroll_speed * dt
+                    if self.text_scroll >= self.max_scroll:
+                        self.text_scroll = self.max_scroll
+                        # Story finished scrolling - start fade out
+                        if not self.text_fade_out:
+                            self.text_fade_out = True
+                            self.text_fade_timer = 0.0
+                            print("Story finished scrolling - starting fade out...")
+
+        # Handle text fade-out
+        if self.text_fade_out and not self.story_finished:
+            self.text_fade_timer += dt
+            if self.text_fade_timer <= self.text_fade_duration:
+                # Fade text from visible to invisible
+                progress = self.text_fade_timer / self.text_fade_duration
+                self.text_alpha = int(255 * (1.0 - progress))
+            else:
+                # Fade complete - hide text and unlock movement
+                self.text_alpha = 0
+                self.text_visible = False
+                self.story_finished = True
+                self.movement_locked = False
+                print("Text fade complete - Movement unlocked!")
 
         # Handle movement only if not locked
         keys = pygame.key.get_pressed()
@@ -421,41 +495,44 @@ class IntroState(GameState):
 
         # Draw story text if visible
         if self.text_visible:
-            # Create semi-transparent overlay covering the full screen
-            text_overlay = pygame.Surface((self.screen_width, self.screen_height))
-            text_overlay.set_alpha(180)
-            text_overlay.fill((0, 0, 0))
-            screen.blit(text_overlay, (0, 0))
 
             # Calculate text area in center of screen
             text_area_width = self.screen_width - 100  # 50px margin on each side
-            text_area_height = self.screen_height - 200  # 100px margin top and bottom
+            text_area_height = self.visible_lines * self.line_height
             text_start_x = 50
-            text_start_y = 100
+            text_start_y = (self.screen_height - text_area_height) // 2  # Center vertically
 
-            # Draw scrollable text
-            y_offset = text_start_y
-            line_height = 35
-            max_lines = min(len(self.story_text), (text_area_height // line_height))
+            # Create a clipping area for smooth scrolling
+            clip_rect = pygame.Rect(text_start_x - 10, text_start_y, text_area_width + 20, text_area_height)
 
-            for i in range(self.text_scroll, min(len(self.story_text), self.text_scroll + max_lines)):
-                if y_offset + line_height > text_start_y + text_area_height:
+            # Save the current clipping area
+            original_clip = screen.get_clip()
+            screen.set_clip(clip_rect)
+
+            # Draw all text lines with smooth pixel-level scrolling
+            for i, line in enumerate(self.story_text):
+                line_y = text_start_y + (i * self.line_height) - self.text_scroll
+
+                # Only render lines that are visible (with some buffer)
+                if line_y > text_start_y + text_area_height + self.line_height:
                     break
+                if line_y < text_start_y - self.line_height:
+                    continue
 
-                line = self.story_text[i]
                 if line:  # Skip empty lines for rendering, but count them for spacing
-                    text_surface = self.text_font.render(line, True, (255, 255, 255))
-                    screen.blit(text_surface, (text_start_x, y_offset))
-                y_offset += line_height
+                    # Add text shadow for better readability over the background
+                    shadow_surface = self.text_font.render(line, True, (0, 0, 0))
+                    shadow_surface.set_alpha(self.text_alpha)
+                    screen.blit(shadow_surface, (text_start_x + 2, line_y + 2))
 
-            # Draw scroll indicator at bottom center
-            if len(self.story_text) > max_lines:
-                scroll_info = f"({self.text_scroll + 1}-{min(self.text_scroll + max_lines, len(self.story_text))} of {len(self.story_text)})"
-                scroll_text = pygame.font.Font(None, 24).render(scroll_info, True, (150, 150, 150))
-                scroll_rect = scroll_text.get_rect()
-                scroll_rect.centerx = self.screen_width // 2
-                scroll_rect.y = self.screen_height - 40
-                screen.blit(scroll_text, scroll_rect)
+                    # Main text with elegant color
+                    text_surface = self.text_font.render(line, True, (240, 230, 210))  # Warm off-white
+                    text_surface.set_alpha(self.text_alpha)
+                    screen.blit(text_surface, (text_start_x, line_y))
+
+            # Restore clipping
+            screen.set_clip(original_clip)
+
 
         # Draw instructions
         if self.movement_locked:
@@ -481,10 +558,14 @@ class IntroState(GameState):
 
         # Draw fade overlay if transitioning
         if self.fade_transition and self.fade_alpha > 0:
-            fade_surface = pygame.Surface((self.screen_width, self.screen_height))
-            fade_surface.set_alpha(self.fade_alpha)
-            fade_surface.fill((0, 0, 0))  # Black fade
+            # Use SRCALPHA surface for smooth fade without box outlines
+            fade_surface = pygame.Surface((self.screen_width, self.screen_height), pygame.SRCALPHA)
+            fade_color = (0, 0, 0, self.fade_alpha)  # Black with alpha
+            fade_surface.fill(fade_color)
             screen.blit(fade_surface, (0, 0))
+
+        # Draw quit overlay on top of everything
+        self.quit_overlay.render(screen)
 
     def cleanup(self):
         """Clean up resources when intro state is destroyed"""

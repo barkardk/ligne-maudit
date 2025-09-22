@@ -8,7 +8,21 @@ class ActionIndicator:
         self.x = x
         self.y = y
         self.visible = False
-        self.font = pygame.font.Font(None, 48)  # Large font for visibility
+
+        # Try to load a system font, fallback to default
+        try:
+            self.font = pygame.font.SysFont('Arial', 48, bold=True)
+            print("ActionIndicator: Using Arial font")
+        except:
+            try:
+                self.font = pygame.font.Font(None, 48)
+                print("ActionIndicator: Using default pygame font")
+            except Exception as e:
+                print(f"ActionIndicator: Font loading failed: {e}")
+                # Last resort - use get_default_font
+                self.font = pygame.font.Font(pygame.font.get_default_font(), 48)
+                print("ActionIndicator: Using system default font")
+
         self.pulse_timer = 0
         self.pulse_speed = 3.0  # Speed of pulsing animation
 
@@ -19,6 +33,7 @@ class ActionIndicator:
         if y is not None:
             self.y = y
         self.visible = True
+        print(f"ActionIndicator shown at ({self.x}, {self.y})")
 
     def hide(self):
         """Hide the action indicator"""
@@ -29,47 +44,46 @@ class ActionIndicator:
         if self.visible:
             self.pulse_timer += dt * self.pulse_speed
 
-    def render(self, screen):
+    def render(self, screen, speech_bubble_visible=False):
         """Render the bright yellow exclamation mark with pulsing effect"""
-        if not self.visible:
+        if not self.visible or speech_bubble_visible:
             return
 
         # Calculate pulsing effect (0.8 to 1.2 scale)
         pulse_scale = 1.0 + 0.2 * math.sin(self.pulse_timer)
 
-        # Colors - very bright yellow with dark outline
+        # Colors - bright yellow with black outline for the exclamation mark only
         yellow = (255, 255, 0)      # Bright yellow
-        dark_yellow = (200, 200, 0) # Darker yellow for shadow
         black = (0, 0, 0)           # Black outline
 
-        # Create exclamation mark text
-        exclamation_text = "!"
+        # Draw standalone yellow exclamation mark (no circle background)
+        # Main vertical line (thicker and taller)
+        line_width = max(4, int(8 * pulse_scale))
+        line_height = int(20 * pulse_scale)
 
-        # Render text at different sizes for outline effect
-        base_font_size = int(48 * pulse_scale)
-        font = pygame.font.Font(None, base_font_size)
+        # Draw black outline for the line
+        outline_rect = pygame.Rect(
+            int(self.x - line_width//2 - 1),
+            int(self.y - line_height//2 - 3),
+            line_width + 2,
+            line_height + 2
+        )
+        pygame.draw.rect(screen, black, outline_rect)
 
-        # Create outlined exclamation mark
-        # Render black outline (slightly offset in all directions)
-        outline_offsets = [(-2, -2), (-2, 0), (-2, 2), (0, -2), (0, 2), (2, -2), (2, 0), (2, 2)]
+        # Draw yellow line
+        line_rect = pygame.Rect(
+            int(self.x - line_width//2),
+            int(self.y - line_height//2 - 2),
+            line_width,
+            line_height
+        )
+        pygame.draw.rect(screen, yellow, line_rect)
 
-        for offset_x, offset_y in outline_offsets:
-            outline_surface = font.render(exclamation_text, True, black)
-            outline_rect = outline_surface.get_rect()
-            outline_rect.center = (self.x + offset_x, self.y + offset_y)
-            screen.blit(outline_surface, outline_rect)
+        # Dot at bottom with outline
+        dot_size = max(4, int(6 * pulse_scale))
+        dot_y = int(self.y + line_height//2 + dot_size + 2)
 
-        # Render main yellow exclamation mark
-        text_surface = font.render(exclamation_text, True, yellow)
-        text_rect = text_surface.get_rect()
-        text_rect.center = (self.x, self.y)
-        screen.blit(text_surface, text_rect)
-
-        # Add a subtle glow effect
-        glow_size = int(base_font_size * 1.3)
-        glow_font = pygame.font.Font(None, glow_size)
-        glow_surface = glow_font.render(exclamation_text, True, dark_yellow)
-        glow_surface.set_alpha(100)  # Semi-transparent glow
-        glow_rect = glow_surface.get_rect()
-        glow_rect.center = (self.x, self.y)
-        screen.blit(glow_surface, glow_rect)
+        # Draw black outline for dot
+        pygame.draw.circle(screen, black, (int(self.x), dot_y), dot_size + 1)
+        # Draw yellow dot
+        pygame.draw.circle(screen, yellow, (int(self.x), dot_y), dot_size)

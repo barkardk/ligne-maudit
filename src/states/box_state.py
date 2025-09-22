@@ -1,6 +1,7 @@
 import pygame
 import os
 from .game_state import GameState
+from ..ui.quit_overlay import QuitOverlay
 
 class BoxState(GameState):
     def __init__(self, screen, box_has_key=True):
@@ -20,6 +21,9 @@ class BoxState(GameState):
         self.font_large = pygame.font.Font(None, 48)
         self.font_medium = pygame.font.Font(None, 36)
         self.font_small = pygame.font.Font(None, 28)
+
+        # Quit overlay
+        self.quit_overlay = QuitOverlay()
 
         print("Box opened - You see a key inside!" if box_has_key else "Box opened - It's empty.")
 
@@ -87,8 +91,24 @@ class BoxState(GameState):
         return background
 
     def handle_event(self, event):
+        # Handle quit overlay input first if it's visible
+        if self.quit_overlay.is_visible():
+            result = self.quit_overlay.handle_input(event)
+            if result == "quit":
+                # Signal the game to quit
+                pygame.event.post(pygame.event.Event(pygame.QUIT))
+                return None
+            elif result == "resume":
+                # Resume game (overlay already hidden)
+                return None
+            # If quit overlay is visible, don't handle other inputs
+            return None
+
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
+                # Show quit overlay
+                self.quit_overlay.show()
+            elif event.key == pygame.K_BACKSPACE:
                 # Close without taking anything
                 return "field"
             elif self.awaiting_response and self.box_has_key:
@@ -103,6 +123,9 @@ class BoxState(GameState):
         return None
 
     def update(self, dt):
+        # Don't update game logic if quit overlay is visible (pause the game)
+        if self.quit_overlay.is_visible():
+            return
         # Static state, nothing to update
         pass
 
@@ -152,6 +175,9 @@ class BoxState(GameState):
             exit_bg_rect = exit_rect.inflate(20, 10)
             pygame.draw.rect(screen, (0, 0, 0, 180), exit_bg_rect)
             screen.blit(exit_text, exit_rect)
+
+        # Draw quit overlay on top of everything
+        self.quit_overlay.render(screen)
 
     def cleanup(self):
         """Clean up resources"""

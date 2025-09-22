@@ -1,6 +1,7 @@
 import pygame
 import os
 from .game_state import GameState
+from ..ui.quit_overlay import QuitOverlay
 
 class DoorState(GameState):
     def __init__(self, screen):
@@ -10,6 +11,9 @@ class DoorState(GameState):
 
         # Try to load door.png background
         self.background = self.load_door_background()
+
+        # Quit overlay
+        self.quit_overlay = QuitOverlay()
 
         print("Door close-up view - Press ESC to go back, ENTER to interact with door")
 
@@ -88,17 +92,36 @@ class DoorState(GameState):
         return background
 
     def handle_event(self, event):
+        # Handle quit overlay input first if it's visible
+        if self.quit_overlay.is_visible():
+            result = self.quit_overlay.handle_input(event)
+            if result == "quit":
+                # Signal the game to quit
+                pygame.event.post(pygame.event.Event(pygame.QUIT))
+                return None
+            elif result == "resume":
+                # Resume game (overlay already hidden)
+                return None
+            # If quit overlay is visible, don't handle other inputs
+            return None
+
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
-                # Go back to field state
-                return "field"
+                # Show quit overlay
+                self.quit_overlay.show()
             elif event.key == pygame.K_RETURN:
                 # Enter the door (go to puzzle)
                 return "puzzle"
+            elif event.key == pygame.K_BACKSPACE:
+                # Go back to field state
+                return "field"
 
         return None  # Stay in this state
 
     def update(self, dt):
+        # Don't update game logic if quit overlay is visible (pause the game)
+        if self.quit_overlay.is_visible():
+            return
         # Nothing to update for static door view
         pass
 
@@ -112,7 +135,8 @@ class DoorState(GameState):
             "Door Close-up View",
             "",
             "ENTER - Open the door",
-            "ESC - Go back"
+            "BACKSPACE - Go back",
+            "ESC - Quit game"
         ]
 
         y_offset = 50
@@ -128,6 +152,9 @@ class DoorState(GameState):
                 screen.blit(text, text_rect)
 
             y_offset += 45
+
+        # Draw quit overlay on top of everything
+        self.quit_overlay.render(screen)
 
     def cleanup(self):
         """Clean up resources when door state is destroyed"""

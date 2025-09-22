@@ -116,17 +116,20 @@ class Lightning:
         self.duration = self.max_duration
         self.intensity = 1.0
 
-    def draw_flash(self, surface):
+    def draw_flash(self, surface, puddle_areas=None):
         if self.active and self.intensity > 0:
-            # Create white overlay for lightning flash - much brighter
-            flash_alpha = int(150 * self.intensity)  # Increased from 80 to 150
-            flash_surface = pygame.Surface((self.screen_width, self.screen_height))
-            flash_surface.set_alpha(flash_alpha)
-            flash_surface.fill((255, 255, 255))
-            surface.blit(flash_surface, (0, 0))
+            # Use pygame's fill with blend mode for seamless flash
+            flash_alpha = int(150 * self.intensity)
 
-            # Lightning flash debug (disabled)
-            # print(f"Lightning flash! Intensity: {self.intensity:.2f}, Alpha: {flash_alpha}")
+            # Create RGBA color with alpha
+            flash_color = (255, 255, 255, flash_alpha)
+
+            # Use a temporary surface with per-pixel alpha
+            temp_surface = pygame.Surface((self.screen_width, self.screen_height), pygame.SRCALPHA)
+            temp_surface.fill(flash_color)
+
+            # Blit with alpha blending
+            surface.blit(temp_surface, (0, 0))
 
 class WeatherSystem:
     def __init__(self, screen_width, screen_height):
@@ -302,6 +305,20 @@ class WeatherSystem:
     def draw_puddles(self, surface):
         for puddle in self.puddles:
             puddle.draw(surface)
+
+    def get_puddle_areas(self):
+        """Get list of puddle rectangles for lightning masking"""
+        puddle_rects = []
+        for puddle in self.puddles:
+            if puddle.size > 2:  # Only include visible puddles
+                puddle_rect = pygame.Rect(
+                    int(puddle.x - puddle.size/2),
+                    int(puddle.y - puddle.size/4),
+                    int(puddle.size),
+                    int(puddle.size/2)
+                )
+                puddle_rects.append(puddle_rect)
+        return puddle_rects
 
     def draw_lightning(self, surface):
         self.lightning.draw_flash(surface)

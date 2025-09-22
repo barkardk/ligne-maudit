@@ -201,7 +201,7 @@ class TicTacToePuzzleState(GameState):
         # Draw background panel
         panel_rect = pygame.Rect(pattern_x - 15, pattern_y - 40, pattern_size + 30, pattern_size + 50)
         pygame.draw.rect(screen, (255, 255, 255, 200), panel_rect)  # Semi-transparent white
-        pygame.draw.rect(screen, (255, 255, 0), panel_rect, 3)  # Yellow border
+        # Yellow border is invisible
 
         # Draw title above the pattern
         title_text = self.small_font.render("TARGET:", True, (0, 0, 0))

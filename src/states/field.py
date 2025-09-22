@@ -9,6 +9,7 @@ from ..ui.quit_overlay import QuitOverlay
 from ..effects.light_effect import LightManager
 from ..effects.weather_system import WeatherSystem
 from ..audio.audio_manager import AudioManager
+from ..objects.animated_rock import AnimatedRock
 
 # Add the project root to the path to import assets
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
@@ -86,11 +87,18 @@ class FieldState(GameState):
         self.shoot_cooldown = 0.0
         self.shoot_delay = 0.2  # seconds between shots
 
-        # Door interaction
+        # Door interaction with multi-stage workflow
         self.action_indicator = ActionIndicator(0, 0)
         self.interaction_prompt = InteractionPrompt()
+        self.speech_bubble = SpeechBubble(0, 0, 200, 60)  # Larger for longer text
         self.near_door = False
         self.door_interaction_distance = 45  # pixels (smaller)
+
+        # Door interaction states
+        self.door_interaction_state = 'none'  # 'none', 'approaching', 'heavy_message', 'confirm_open', 'struggling', 'unlocking'
+        self.door_message_timer = 0.0
+        self.door_message_duration = 3.0  # 3 seconds before auto-advance
+        self.has_key = False  # Track if player has picked up the key
 
         # Quit overlay
         self.quit_overlay = QuitOverlay()
@@ -103,6 +111,44 @@ class FieldState(GameState):
         self.flash_interaction_distance = 30  # pixels
         self.flash_has_key = True  # Initially has key
         self.flash_discovered = False  # Track if flash has been discovered
+
+        # Animated rock - place it on the right side of the screen, much lower down
+        self.animated_rock = AnimatedRock(700, 700)
+        self.near_rock = False
+        self.is_sitting = False
+
+        # Side transition areas (left and right edges to go to behind bunker)
+        self.transition_distance = 50  # pixels from edge
+        self.near_left_transition = False
+        self.near_right_transition = False
+
+        # Grid-based collision boxes (4x4 grid)
+        self.grid_width = self.screen_width // 4  # 256px per grid cell
+        self.grid_height = self.screen_height // 4  # 192px per grid cell
+
+        # Red collision box (right side) - moved 30px right
+        self.collision_box_red_x = 2 * self.grid_width + 50 + 50 + 30  # 612px + 30px = 642px
+        self.collision_box_red_y = 2 * self.grid_height + 200 - 50  # 534px
+        self.collision_box_red_width = 80
+        self.collision_box_red_height = 60
+        self.near_collision_box_red = False
+
+        # Blue collision box (left side) - moved 30px left from original left position
+        self.collision_box_blue_x = (2 * self.grid_width + 50 + 50) - 300 - 30  # 612px - 300px - 30px = 282px
+        self.collision_box_blue_y = 2 * self.grid_height + 200 - 50  # 534px
+        self.collision_box_blue_width = 80
+        self.collision_box_blue_height = 60
+        self.near_collision_box_blue = False
+
+        # Transition cooldown to prevent endless loops
+        self.transition_cooldown = 0.0
+        self.transition_cooldown_duration = 10.0  # 10 seconds before allowing another transition
+
+        # Fade-out transition system
+        self.fade_out = False
+        self.fade_out_timer = 0.0
+        self.fade_out_duration = 1.0  # 1 second fade-out
+        self.next_scene = None
 
         # Realistic flickering light effect
         self.flicker_timer = 0.0
@@ -198,6 +244,7 @@ class FieldState(GameState):
         """Called when player takes key from flash"""
         self.flash_has_key = False
         self.flash_discovered = True
+        self.has_key = True  # Player now has the key
         print("You took the key! The flash area is now inactive.")
 
     def generate_flicker_sequence(self):
@@ -247,7 +294,7 @@ class FieldState(GameState):
             self.next_event_time = current_time + random.uniform(3.0, 6.0)  # More frequent
 
     def check_door_proximity(self):
-        """Check if protagonist is near the door and handle speech bubble"""
+        """Check if protagonist is near the door and handle multi-stage interaction"""
         # Calculate distance from protagonist to door
         protagonist_center_x = self.protagonist_x + (self.protagonist_animation.get_current_frame().get_width() * self.character_display_scale) // 2 if self.protagonist_animation.get_current_frame() else self.protagonist_x + 32
         protagonist_center_y = self.protagonist_y + (self.protagonist_animation.get_current_frame().get_height() * self.character_display_scale) // 2 if self.protagonist_animation.get_current_frame() else self.protagonist_y + 48
@@ -256,26 +303,232 @@ class FieldState(GameState):
 
         if distance <= self.door_interaction_distance:
             if not self.near_door:
-                self.show_door_interaction()
+                self.start_door_interaction()
             self.near_door = True
         else:
             if self.near_door:
-                self.hide_door_interaction()
+                self.end_door_interaction()
             self.near_door = False
 
-    def show_door_interaction(self):
-        """Show door interaction UI"""
-        # Position yellow exclamation mark above the door
-        indicator_x = self.door_x
-        indicator_y = self.door_y - 60  # Above the door
-        self.action_indicator.show(indicator_x, indicator_y)
-        self.interaction_prompt.show()
+    def start_door_interaction(self):
+        """Start the door interaction workflow"""
+        if self.door_interaction_state == 'none':
+            # Show exclamation mark and start heavy message
+            indicator_x = self.door_x
+            indicator_y = self.door_y - 60  # Above the door
+            self.action_indicator.show(indicator_x, indicator_y)
 
-    def hide_door_interaction(self):
-        """Hide door interaction UI"""
+            # Show speech bubble with "this door looks really heavy"
+            bubble_x = self.door_x - 100  # Position to the left of door
+            bubble_y = self.door_y - 120  # Above the door
+            self.speech_bubble.show("This door looks really heavy", bubble_x, bubble_y)
+
+            self.door_interaction_state = 'heavy_message'
+            self.door_message_timer = 0.0
+            print("Door interaction started: showing heavy message")
+
+    def end_door_interaction(self):
+        """End door interaction and reset state"""
         if not self.near_flash:  # Only hide if not near flash
             self.action_indicator.hide()
             self.interaction_prompt.hide()
+        self.speech_bubble.hide()
+        self.door_interaction_state = 'none'
+        self.door_message_timer = 0.0
+        print("Door interaction ended")
+
+    def advance_door_interaction(self):
+        """Advance to next stage of door interaction"""
+        if self.door_interaction_state == 'heavy_message':
+            # Move to confirmation stage
+            self.speech_bubble.show("Open door?", self.door_x - 100, self.door_y - 120)
+            self.interaction_prompt.show()
+            self.door_interaction_state = 'confirm_open'
+            self.door_message_timer = 0.0
+            print("Door interaction: showing open confirmation")
+        elif self.door_interaction_state == 'confirm_open':
+            # Player pressed Y - attempt to open door
+            self.attempt_door_open()
+
+    def attempt_door_open(self):
+        """Attempt to open the door based on key possession"""
+        if self.has_key:
+            # Player has key - ask about unlocking
+            self.speech_bubble.show("Unlock door?", self.door_x - 100, self.door_y - 120)
+            self.door_interaction_state = 'unlocking'
+            self.door_message_timer = 0.0
+            print("Door interaction: asking about unlocking with key")
+        else:
+            # Player doesn't have key - struggle and say it's locked
+            self.speech_bubble.show("It's locked!", self.door_x - 100, self.door_y - 120)
+            self.door_interaction_state = 'struggling'
+            self.door_message_timer = 0.0
+            print("Door interaction: door is locked, showing struggle message")
+
+    def attempt_door_unlock(self):
+        """Try to unlock door with key"""
+        # Key doesn't fit - show message
+        self.speech_bubble.show("The key doesn't fit", self.door_x - 100, self.door_y - 120)
+        self.door_interaction_state = 'struggling'  # Reuse struggling state for timeout
+        self.door_message_timer = 0.0
+        print("Door interaction: key doesn't fit message")
+
+    def check_rock_proximity(self):
+        """Check if protagonist is near the rock"""
+        if self.is_sitting:
+            return  # Don't check proximity while sitting
+
+        # Get protagonist sprite dimensions
+        current_frame = self.protagonist_animation.get_current_frame()
+        if current_frame:
+            sprite_width = int(current_frame.get_width() * self.character_display_scale)
+            sprite_height = int(current_frame.get_height() * self.character_display_scale)
+        else:
+            sprite_width = 64
+            sprite_height = 96
+
+        # Check if protagonist is near rock
+        was_near_rock = self.near_rock
+        self.near_rock = self.animated_rock.check_proximity(
+            self.protagonist_x, self.protagonist_y, sprite_width, sprite_height
+        )
+
+        # Print debug info when proximity changes
+        if self.near_rock != was_near_rock:
+            if self.near_rock:
+                print("Near rock - Press ENTER to sit")
+            else:
+                print("Left rock area")
+
+    def sit_on_rock(self):
+        """Make protagonist sit on the rock"""
+        if not self.near_rock or self.is_sitting:
+            return
+
+        # Move protagonist to sitting position
+        sit_x, sit_y = self.animated_rock.get_sitting_position()
+        self.protagonist_x = sit_x
+        self.protagonist_y = sit_y
+
+        # Set sitting state
+        self.is_sitting = True
+        self.animated_rock.is_occupied = True
+
+        # Set idle animation facing down
+        self.protagonist_animation.play_animation('idle_down')
+        self.last_facing_direction = 'down'
+
+        print("Protagonist is now sitting on the rock")
+
+    def stand_up_from_rock(self):
+        """Make protagonist stand up from the rock"""
+        if not self.is_sitting:
+            return
+
+        # Move protagonist slightly away from rock
+        self.protagonist_x += 10  # Move slightly right
+        self.protagonist_y += 40  # Move down from rock
+
+        # Clear sitting state
+        self.is_sitting = False
+        self.animated_rock.is_occupied = False
+
+        print("Protagonist stood up from the rock")
+
+    def check_side_transitions(self):
+        """Check if protagonist is near the side edges to transition to behind bunker"""
+        if self.fade_out or hasattr(self, 'transitioning') and self.transitioning:
+            return
+
+        # Get protagonist center
+        current_frame = self.protagonist_animation.get_current_frame()
+        if current_frame:
+            sprite_width = int(current_frame.get_width() * self.character_display_scale)
+            sprite_height = int(current_frame.get_height() * self.character_display_scale)
+        else:
+            sprite_width = 64
+            sprite_height = 96
+
+        protagonist_center_x = self.protagonist_x + sprite_width // 2
+        protagonist_center_y = self.protagonist_y + sprite_height // 2
+
+        # Check left edge
+        if protagonist_center_x <= self.transition_distance:
+            if not self.near_left_transition:
+                print("Near left transition area - move left to go behind bunker")
+                self.near_left_transition = True
+        else:
+            self.near_left_transition = False
+
+        # Check right edge
+        if protagonist_center_x >= self.screen_width - self.transition_distance:
+            if not self.near_right_transition:
+                print("Near right transition area - move right to go behind bunker")
+                self.near_right_transition = True
+        else:
+            self.near_right_transition = False
+
+        # Trigger transition if at the very edge
+        if protagonist_center_x <= 10:  # Very left edge
+            self.start_fade_transition("behind_bunker_left")
+        elif protagonist_center_x >= self.screen_width - 10:  # Very right edge
+            self.start_fade_transition("behind_bunker_right")
+
+    def start_fade_transition(self, next_scene):
+        """Start fade out transition to next scene"""
+        if self.fade_out or hasattr(self, 'transitioning') and self.transitioning:
+            return
+
+        print(f"Starting fade transition to {next_scene}")
+        self.fade_out = True
+        self.fade_out_timer = 0.0
+        self.next_scene = next_scene
+        if not hasattr(self, 'transitioning'):
+            self.transitioning = False
+        self.transitioning = True
+
+    def check_collision_boxes(self):
+        """Check if protagonist is in any of the grid-based collision boxes"""
+        if self.fade_out or hasattr(self, 'transitioning') and self.transitioning:
+            return
+
+        # Check transition cooldown to prevent endless loops
+        if self.transition_cooldown > 0:
+            return
+
+        # Get protagonist center
+        current_frame = self.protagonist_animation.get_current_frame()
+        if current_frame:
+            sprite_width = int(current_frame.get_width() * self.character_display_scale)
+            sprite_height = int(current_frame.get_height() * self.character_display_scale)
+        else:
+            sprite_width = 64
+            sprite_height = 96
+
+        protagonist_center_x = self.protagonist_x + sprite_width // 2
+        protagonist_center_y = self.protagonist_y + sprite_height // 2
+
+        # Check red collision box (right side) - automatically trigger transition when protagonist enters
+        if (self.collision_box_red_x <= protagonist_center_x <= self.collision_box_red_x + self.collision_box_red_width and
+            self.collision_box_red_y <= protagonist_center_y <= self.collision_box_red_y + self.collision_box_red_height):
+            if not self.near_collision_box_red:
+                print("Entering red collision box - transitioning to behind bunker scene (red)")
+                self.near_collision_box_red = True
+                # Automatically start transition to scene 3, spawn at red box
+                self.start_fade_transition("behind_bunker_red")
+        else:
+            self.near_collision_box_red = False
+
+        # Check blue collision box (left side) - automatically trigger transition when protagonist enters
+        if (self.collision_box_blue_x <= protagonist_center_x <= self.collision_box_blue_x + self.collision_box_blue_width and
+            self.collision_box_blue_y <= protagonist_center_y <= self.collision_box_blue_y + self.collision_box_blue_height):
+            if not self.near_collision_box_blue:
+                print("Entering blue collision box - transitioning to behind bunker scene (blue)")
+                self.near_collision_box_blue = True
+                # Automatically start transition to scene 3, spawn at blue box
+                self.start_fade_transition("behind_bunker_blue")
+        else:
+            self.near_collision_box_blue = False
 
     def handle_event(self, event):
         # Handle quit overlay input first if it's visible
@@ -302,11 +555,35 @@ class FieldState(GameState):
                 # Toggle audio mute
                 self.audio.toggle_mute()
             elif event.key == pygame.K_RETURN and self.near_door:
-                # Enter door close-up view
-                return "door"
+                if self.door_interaction_state == 'heavy_message':
+                    # Advance from heavy message to confirmation
+                    self.advance_door_interaction()
+                elif self.door_interaction_state == 'confirm_open':
+                    # Show Y/N instruction instead of auto-opening
+                    pass
+            elif event.key == pygame.K_y and self.near_door:
+                if self.door_interaction_state == 'confirm_open':
+                    # Player confirms opening door
+                    self.attempt_door_open()
+                elif self.door_interaction_state == 'unlocking':
+                    # Player confirms unlocking with key
+                    self.attempt_door_unlock()
+            elif event.key == pygame.K_n and self.near_door:
+                if self.door_interaction_state == 'confirm_open' or self.door_interaction_state == 'unlocking':
+                    # Player cancels - go back to heavy message
+                    self.speech_bubble.show("This door looks really heavy", self.door_x - 100, self.door_y - 120)
+                    self.interaction_prompt.hide()
+                    self.door_interaction_state = 'heavy_message'
+                    self.door_message_timer = 0.0
             elif event.key == pygame.K_RETURN and self.near_flash:
                 # Interact with flash
                 return "flash"
+            elif event.key == pygame.K_RETURN and self.near_rock and not self.is_sitting:
+                # Sit on rock
+                self.sit_on_rock()
+            elif event.key == pygame.K_RETURN and self.is_sitting:
+                # Stand up from rock
+                self.stand_up_from_rock()
 
         return None  # Stay in this state
 
@@ -318,29 +595,37 @@ class FieldState(GameState):
         keys = pygame.key.get_pressed()
         self.is_moving = False
 
-        # Handle movement with collision detection
-        old_x = self.protagonist_x
-        old_y = self.protagonist_y
-        new_x = old_x
-        new_y = old_y
-        movement_direction = None
+        # Handle movement with collision detection (only if not sitting)
+        if not self.is_sitting:
+            old_x = self.protagonist_x
+            old_y = self.protagonist_y
+            new_x = old_x
+            new_y = old_y
+            movement_direction = None
 
-        if keys[pygame.K_LEFT] or keys[pygame.K_a]:
-            new_x -= self.move_speed * dt
-            self.is_moving = True
-            movement_direction = 'left'
-        if keys[pygame.K_RIGHT] or keys[pygame.K_d]:
-            new_x += self.move_speed * dt
-            self.is_moving = True
-            movement_direction = 'right'
-        if keys[pygame.K_UP] or keys[pygame.K_w]:
-            new_y -= self.move_speed * dt
-            self.is_moving = True
-            movement_direction = 'up'
-        if keys[pygame.K_DOWN] or keys[pygame.K_s]:
-            new_y += self.move_speed * dt
-            self.is_moving = True
-            movement_direction = 'down'
+            if keys[pygame.K_LEFT] or keys[pygame.K_a]:
+                new_x -= self.move_speed * dt
+                self.is_moving = True
+                movement_direction = 'left'
+            if keys[pygame.K_RIGHT] or keys[pygame.K_d]:
+                new_x += self.move_speed * dt
+                self.is_moving = True
+                movement_direction = 'right'
+            if keys[pygame.K_UP] or keys[pygame.K_w]:
+                new_y -= self.move_speed * dt
+                self.is_moving = True
+                movement_direction = 'up'
+            if keys[pygame.K_DOWN] or keys[pygame.K_s]:
+                new_y += self.move_speed * dt
+                self.is_moving = True
+                movement_direction = 'down'
+        else:
+            # If sitting, no movement but keep current position
+            old_x = self.protagonist_x
+            old_y = self.protagonist_y
+            new_x = old_x
+            new_y = old_y
+            movement_direction = None
 
         # Get the actual frame from animation to determine size
         current_frame = self.protagonist_animation.get_current_frame()
@@ -353,20 +638,22 @@ class FieldState(GameState):
             sprite_width = int(64 * 2.52 * self.character_display_scale)
             sprite_height = int(96 * 2.52 * self.character_display_scale)
 
-        # Keep protagonist on screen and add door height restriction
-        new_x = max(0, min(self.screen_width - sprite_width, new_x))
-        # Don't allow protagonist to go higher than the door's top edge
-        min_y = max(0, self.door_y - 50)  # Allow some space above door
-        new_y = max(min_y, min(self.screen_height - sprite_height, new_y))
+        # Only update position if not sitting
+        if not self.is_sitting:
+            # Keep protagonist on screen and add door height restriction
+            new_x = max(0, min(self.screen_width - sprite_width, new_x))
+            # Don't allow protagonist to go higher than the door's top edge
+            min_y = max(0, self.door_y - 50)  # Allow some space above door
+            new_y = max(min_y, min(self.screen_height - sprite_height, new_y))
 
-        # Check collision and get valid position
-        self.protagonist_x, self.protagonist_y = self.collision_map.get_valid_position(
-            old_x, old_y, new_x, new_y, sprite_width, sprite_height
-        )
+            # Check collision and get valid position
+            self.protagonist_x, self.protagonist_y = self.collision_map.get_valid_position(
+                old_x, old_y, new_x, new_y, sprite_width, sprite_height
+            )
 
-        # Handle shooting
+        # Handle shooting (only if not sitting)
         self.shoot_cooldown -= dt
-        if keys[pygame.K_f] and self.shoot_cooldown <= 0:
+        if keys[pygame.K_f] and self.shoot_cooldown <= 0 and not self.is_sitting:
             direction_x, direction_y = get_direction_from_keys(keys)
             # Create bullet at protagonist's gun position (accounting for display scale)
             if current_frame:
@@ -436,9 +723,53 @@ class FieldState(GameState):
                 self.current_flicker_intensity = self.flicker_target_intensity
                 self.is_white_flash = False  # White flash only lasts one frame
 
-        # Check proximity to door and flash
+        # Update door interaction workflow
+        if self.near_door and self.door_interaction_state != 'none':
+            self.door_message_timer += dt
+
+            # Auto-advance after timeout
+            if self.door_message_timer >= self.door_message_duration:
+                if self.door_interaction_state == 'heavy_message':
+                    self.advance_door_interaction()
+                elif self.door_interaction_state in ['struggling', 'unlocking']:
+                    # Return to heavy message after struggle/key failure
+                    self.speech_bubble.show("This door looks really heavy", self.door_x - 100, self.door_y - 120)
+                    self.interaction_prompt.hide()
+                    self.door_interaction_state = 'heavy_message'
+                    self.door_message_timer = 0.0
+
+        # Handle fade-out transition
+        if self.fade_out:
+            self.fade_out_timer += dt
+            if self.fade_out_timer <= self.fade_out_duration:
+                # Fade from transparent to black (0 to 255)
+                progress = self.fade_out_timer / self.fade_out_duration
+                self.fade_alpha = int(255 * progress)
+            else:
+                # Fade-out complete - transition to next scene
+                print(f"Fade out complete - transitioning to {self.next_scene}")
+                return self.next_scene
+
+        # Update transition cooldown
+        if self.transition_cooldown > 0:
+            self.transition_cooldown -= dt
+
+        # Don't handle movement during fade transitions
+        if self.fade_out:
+            return
+
+        # Check proximity to door, flash, and rock
         self.check_door_proximity()
         self.check_flash_proximity()
+        self.check_rock_proximity()
+
+        # Check side transitions (only if not sitting)
+        if not self.is_sitting:
+            self.check_side_transitions()
+            self.check_collision_boxes()
+
+        # Update animated rock
+        self.animated_rock.update(dt)
 
         # Handle fade-in transition
         if self.fade_in:
@@ -542,18 +873,73 @@ class FieldState(GameState):
         pygame.draw.rect(screen, (0, 0, 0, 128), bg_rect)
         screen.blit(location_text, text_rect)
 
+        # Draw animated rock
+        self.animated_rock.render(screen)
+        if self.near_rock:
+            self.animated_rock.render_interaction_hint(screen)
+
+        # Draw transition hints if near edges
+        if self.near_left_transition or self.near_right_transition:
+            hint_font = pygame.font.Font(None, 28)
+            hint_text = hint_font.render("Move to edge to go behind bunker", True, (255, 255, 0))
+            hint_rect = hint_text.get_rect()
+            hint_rect.centerx = self.screen_width // 2
+            hint_rect.bottom = self.screen_height - 60
+
+            # Draw hint background
+            hint_bg_rect = hint_rect.inflate(20, 10)
+            pygame.draw.rect(screen, (0, 0, 0, 180), hint_bg_rect)
+            screen.blit(hint_text, hint_rect)
+
+        # Draw collision box hints (though transition is now automatic)
+        if self.near_collision_box_red or self.near_collision_box_blue:
+            hint_font = pygame.font.Font(None, 28)
+            hint_text = hint_font.render("Transitioning to behind bunker...", True, (255, 255, 0))
+            hint_rect = hint_text.get_rect()
+            hint_rect.centerx = self.screen_width // 2
+            hint_rect.bottom = self.screen_height - 100
+
+            # Draw hint background
+            hint_bg_rect = hint_rect.inflate(20, 10)
+            pygame.draw.rect(screen, (0, 0, 0, 180), hint_bg_rect)
+            screen.blit(hint_text, hint_rect)
+
+        # ALWAYS draw both collision box squares for visualization
+        # Red collision box (right side) at (642, 534) - RED
+        collision_box_red_rect = pygame.Rect(self.collision_box_red_x, self.collision_box_red_y,
+                                            self.collision_box_red_width, self.collision_box_red_height)
+        # Red collision box is invisible
+
+        # Blue collision box (left side) at (282, 534) - BLUE
+        collision_box_blue_rect = pygame.Rect(self.collision_box_blue_x, self.collision_box_blue_y,
+                                             self.collision_box_blue_width, self.collision_box_blue_height)
+        # Blue collision box is invisible
+
+        # Draw grid overlay for reference (optional debug)
+        if hasattr(self.collision_map, 'debug_mode') and self.collision_map.debug_mode:
+            # Draw grid lines
+            for i in range(5):  # 4 sections = 5 lines
+                x = i * self.grid_width
+                y = i * self.grid_height
+                # Vertical lines
+                pygame.draw.line(screen, (100, 100, 100), (x, 0), (x, self.screen_height), 1)
+                # Horizontal lines
+                pygame.draw.line(screen, (100, 100, 100), (0, y), (self.screen_width, y), 1)
+
         # Draw door interaction UI
-        self.action_indicator.render(screen)
+        self.action_indicator.render(screen, self.speech_bubble.visible)
         self.interaction_prompt.render(screen)
+        self.speech_bubble.render(screen)
 
         # Draw quit overlay on top of everything
         self.quit_overlay.render(screen)
 
-        # Draw fade-in overlay if transitioning
-        if self.fade_in and self.fade_alpha > 0:
-            fade_surface = pygame.Surface((self.screen_width, self.screen_height))
-            fade_surface.set_alpha(self.fade_alpha)
-            fade_surface.fill((0, 0, 0))  # Black fade
+        # Draw fade overlay if transitioning
+        if (self.fade_in or self.fade_out) and self.fade_alpha > 0:
+            # Use SRCALPHA surface for smooth fade without box outlines
+            fade_surface = pygame.Surface((self.screen_width, self.screen_height), pygame.SRCALPHA)
+            fade_color = (0, 0, 0, self.fade_alpha)  # Black with alpha
+            fade_surface.fill(fade_color)
             screen.blit(fade_surface, (0, 0))
 
     def cleanup(self):
