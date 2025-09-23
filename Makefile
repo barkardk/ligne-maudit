@@ -1,12 +1,18 @@
 -include llm.mk
-.PHONY: help venv install run clean test
+.PHONY: help venv install run clean test run0 run1 run2 run3 run4 run5
 
 help:
 	@echo "Ligne Maudite - Available commands:"
 	@echo ""
 	@echo "  make venv     - Create virtual environment and install dependencies"
 	@echo "  make install  - Install/update dependencies in existing venv"
-	@echo "  make run      - Run the game (requires venv)"
+	@echo "  make run      - Run the full game (requires venv)"
+	@echo "  make run0     - Run scene 0 (story) directly"
+	@echo "  make run1     - Run scene 1 (forest path) directly"
+	@echo "  make run2     - Run scene 2 (field) directly"
+	@echo "  make run3     - Run scene 3 (behind bunker) directly"
+	@echo "  make run4     - Run scene 4 (dragonteeth) directly"
+	@echo "  make run5     - Run scene 5 (bunker interior) directly"
 	@echo "  make clean    - Remove virtual environment"
 	@echo "  make test     - Run tests (when available)"
 	@echo ""
@@ -75,3 +81,52 @@ test:
 	fi
 	@echo "Running tests..."
 	@./venv/bin/python -m pytest tests/ || echo "No tests found yet"
+
+# Scene-specific run commands
+run0:
+	@if [ ! -d "venv" ]; then \
+		echo "Virtual environment not found. Run 'make venv' first."; \
+		exit 1; \
+	fi
+	@echo "Starting Scene 0 (Story)..."
+	@./venv/bin/python main.py --scene 0
+
+run1:
+	@if [ ! -d "venv" ]; then \
+		echo "Virtual environment not found. Run 'make venv' first."; \
+		exit 1; \
+	fi
+	@echo "Starting Scene 1 (Forest Path)..."
+	@./venv/bin/python main.py --scene 1
+
+run2:
+	@if [ ! -d "venv" ]; then \
+		echo "Virtual environment not found. Run 'make venv' first."; \
+		exit 1; \
+	fi
+	@echo "Starting Scene 2 (Field)..."
+	@./venv/bin/python main.py --scene 2
+
+run3:
+	@if [ ! -d "venv" ]; then \
+		echo "Virtual environment not found. Run 'make venv' first."; \
+		exit 1; \
+	fi
+	@echo "Starting Scene 3 (Behind Bunker)..."
+	@./venv/bin/python main.py --scene 3
+
+run4:
+	@if [ ! -d "venv" ]; then \
+		echo "Virtual environment not found. Run 'make venv' first."; \
+		exit 1; \
+	fi
+	@echo "Starting Scene 4 (Dragonteeth)..."
+	@./venv/bin/python main.py --scene 4
+
+run5:
+	@if [ ! -d "venv" ]; then \
+		echo "Virtual environment not found. Run 'make venv' first."; \
+		exit 1; \
+	fi
+	@echo "Starting Scene 5 (Bunker Interior)..."
+	@./venv/bin/python main.py --scene 5

@@ -22,7 +22,7 @@ class DoorState(GameState):
         try:
             # Try to load door.png from assets/images/backgrounds/
             project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-            door_path = os.path.join(project_root, "assets", "images", "backgrounds", "door.png")
+            door_path = os.path.join(project_root, "assets", "images", "backgrounds", "scene2", "door.png")
 
             if os.path.exists(door_path):
                 background = pygame.image.load(door_path)

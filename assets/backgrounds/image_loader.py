@@ -1,13 +1,17 @@
 import pygame
 import os
 
-def load_background_image(filename, target_width=1024, target_height=768):
+def load_background_image(filename, target_width=1024, target_height=768, scene_folder=None):
     """Load and scale a background image to fit the screen"""
     try:
         # Get the path to the images directory
         current_dir = os.path.dirname(__file__)
         project_root = os.path.dirname(os.path.dirname(current_dir))
-        image_path = os.path.join(project_root, "assets", "images", "backgrounds", filename)
+
+        if scene_folder:
+            image_path = os.path.join(project_root, "assets", "images", "backgrounds", scene_folder, filename)
+        else:
+            image_path = os.path.join(project_root, "assets", "images", "backgrounds", filename)
 
         # Debug: print the path being tried
         print(f"Trying to load image from: {image_path}")
@@ -33,16 +37,15 @@ def load_concept_art_background(screen_width, screen_height, fallback_function=N
     """
     Try to load concept art, fall back to generated background if not available
     """
-    # Try to load your concept art files (you'll add these)
+    # Try to load your concept art files from scene2 folder (for field state)
     concept_files = [
-        "maginot_concept.png",
+        "bunker.png",
         "maginot_concept.jpg",
-        "bunker_exterior.png",
         "ff9_style_bunker.png"
     ]
 
     for filename in concept_files:
-        background = load_background_image(filename, screen_width, screen_height)
+        background = load_background_image(filename, screen_width, screen_height, scene_folder="scene2")
         if background:
             return background
 

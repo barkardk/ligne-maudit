@@ -1,17 +1,19 @@
 import pygame
 from .states.combat import CombatState
 from .states.field import FieldState
+from .states.scene0_state import Scene0State
 from .states.intro_state import IntroState
 from .states.puzzle_state import TicTacToePuzzleState
 from .states.door_state import DoorState
 from .states.box_state import BoxState
 from .states.behind_bunker_state import BehindBunkerState
 from .states.dragonteeth_state import DragonteethState
+from .states.scene5_state import Scene5State
 from .states.game_state import GameStateManager
 from .audio.audio_manager import AudioManager
 
 class Game:
-    def __init__(self):
+    def __init__(self, start_scene=None):
         self.base_width = 1024
         self.base_height = 768
         self.screen_width = 1024
@@ -30,7 +32,29 @@ class Game:
         self.audio_manager.load_ambient_pack()
 
         self.state_manager = GameStateManager()
-        self.state_manager.push_state(IntroState(self.display_surface, self.audio_manager))
+
+        # Start with specified scene or default to scene 0
+        if start_scene == 0:
+            print("Starting directly in Scene 0 (Story)")
+            self.state_manager.push_state(Scene0State(self.display_surface, self.audio_manager))
+        elif start_scene == 1:
+            print("Starting directly in Scene 1 (Forest Path)")
+            self.state_manager.push_state(IntroState(self.display_surface, self.audio_manager))
+        elif start_scene == 2:
+            print("Starting directly in Scene 2 (Field)")
+            self.state_manager.push_state(FieldState(self.display_surface, self.audio_manager))
+        elif start_scene == 3:
+            print("Starting directly in Scene 3 (Behind Bunker)")
+            self.state_manager.push_state(BehindBunkerState(self.display_surface, self.audio_manager))
+        elif start_scene == 4:
+            print("Starting directly in Scene 4 (Dragonteeth)")
+            self.state_manager.push_state(DragonteethState(self.display_surface, self.audio_manager))
+        elif start_scene == 5:
+            print("Starting directly in Scene 5 (Bunker Interior)")
+            self.state_manager.push_state(Scene5State(self.display_surface, self.audio_manager))
+        else:
+            # Default to scene 0 (story)
+            self.state_manager.push_state(Scene0State(self.display_surface, self.audio_manager))
 
     def toggle_fullscreen(self):
         """Toggle between fullscreen and windowed mode"""
@@ -73,6 +97,9 @@ class Game:
             if hasattr(field_state, 'take_key_from_flash'):
                 field_state.take_key_from_flash()
             self.state_manager.pop_state()  # Return to field
+        elif new_state_name == "intro":
+            # Transition from scene 0 to scene 1 (forest path with protagonist)
+            self.state_manager.change_state(IntroState(self.display_surface, self.audio_manager))
         elif new_state_name == "field":
             # Check if we're transitioning from intro or returning from another state
             if len(self.state_manager.states) == 1:
@@ -147,6 +174,11 @@ class Game:
             behind_bunker_state.protagonist_x = behind_bunker_state.screen_width // 2 - 32
             behind_bunker_state.protagonist_y = behind_bunker_state.screen_height - 100
             self.state_manager.change_state(behind_bunker_state)
+        elif new_state_name == "bunker_interior":
+            # Transition to scene 5 (bunker interior) when hitting the hatch
+            print("Transitioning to Scene 5 (Bunker Interior)")
+            scene5_state = Scene5State(self.display_surface, self.audio_manager)
+            self.state_manager.change_state(scene5_state)
 
     def handle_events(self):
         for event in pygame.event.get():

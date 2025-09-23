@@ -131,7 +131,7 @@ class DragonteethState(GameState):
         import time
         try:
             project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-            bg_path = os.path.join(project_root, "assets", "images", "backgrounds", "dragonteeth.png")
+            bg_path = os.path.join(project_root, "assets", "images", "backgrounds", "scene4", "dragonteeth.png")
             print(f"[{time.time():.2f}] Checking for dragonteeth.png at: {bg_path}")
 
             if os.path.exists(bg_path):
@@ -490,6 +490,17 @@ class DragonteethState(GameState):
 
         # Draw weather effects (rain and lightning over everything)
         self.weather.draw(screen)
+
+        # Draw scene number
+        scene_font = pygame.font.Font(None, 36)
+        scene_text = scene_font.render("SCENE 4", True, (255, 255, 255))
+        scene_rect = scene_text.get_rect()
+        scene_rect.topright = (self.screen_width - 20, 20)
+
+        # Draw scene background
+        scene_bg_rect = scene_rect.inflate(10, 5)
+        pygame.draw.rect(screen, (0, 0, 0, 180), scene_bg_rect)
+        screen.blit(scene_text, scene_rect)
 
         # Draw speech bubble if active
         if self.speech_active:

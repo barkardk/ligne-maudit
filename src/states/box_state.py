@@ -34,9 +34,9 @@ class BoxState(GameState):
 
             # Choose the right background based on whether box has key
             if self.box_has_key:
-                bg_path = os.path.join(project_root, "assets", "images", "backgrounds", "inside_box.png")
+                bg_path = os.path.join(project_root, "assets", "images", "backgrounds", "scene2", "inside_box.png")
             else:
-                bg_path = os.path.join(project_root, "assets", "images", "backgrounds", "inside_empty_box.png")
+                bg_path = os.path.join(project_root, "assets", "images", "backgrounds", "scene2", "inside_empty_box.png")
 
             if os.path.exists(bg_path):
                 background = pygame.image.load(bg_path)

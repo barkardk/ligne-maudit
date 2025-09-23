@@ -142,7 +142,7 @@ class FieldState(GameState):
 
         # Transition cooldown to prevent endless loops
         self.transition_cooldown = 0.0
-        self.transition_cooldown_duration = 10.0  # 10 seconds before allowing another transition
+        self.transition_cooldown_duration = 2.0  # 2 seconds before allowing another transition
 
         # Fade-out transition system
         self.fade_out = False
@@ -862,9 +862,20 @@ class FieldState(GameState):
         # Draw collision debug if enabled
         self.collision_map.render_debug(screen)
 
+        # Draw scene number
+        scene_font = pygame.font.Font(None, 36)
+        scene_text = scene_font.render("SCENE 2", True, (255, 255, 255))
+        scene_rect = scene_text.get_rect()
+        scene_rect.topright = (self.screen_width - 20, 20)
+
+        # Draw scene background
+        scene_bg_rect = scene_rect.inflate(10, 5)
+        pygame.draw.rect(screen, (0, 0, 0, 180), scene_bg_rect)
+        screen.blit(scene_text, scene_rect)
+
         # Optional: Draw a simple UI element showing location
         font = pygame.font.Font(None, 24)
-        location_text = font.render("Outside the Maginot Line - Press F to shoot!", True, (255, 255, 255))
+        location_text = font.render("Outside the Maginot Line - SCENE 2", True, (255, 255, 255))
         text_rect = location_text.get_rect()
         text_rect.topleft = (10, 10)
 
