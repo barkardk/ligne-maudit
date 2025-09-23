@@ -9,6 +9,7 @@ from .states.box_state import BoxState
 from .states.behind_bunker_state import BehindBunkerState
 from .states.dragonteeth_state import DragonteethState
 from .states.scene5_state import Scene5State
+from .states.fight0_state import Fight0State
 from .states.game_state import GameStateManager
 from .audio.audio_manager import AudioManager
 
@@ -52,6 +53,9 @@ class Game:
         elif start_scene == 5:
             print("Starting directly in Scene 5 (Bunker Interior)")
             self.state_manager.push_state(Scene5State(self.display_surface, self.audio_manager))
+        elif start_scene == "fight0":
+            print("Starting directly in Fight 0 (Battle Arena)")
+            self.state_manager.push_state(Fight0State(self.display_surface, self.audio_manager))
         else:
             # Default to scene 0 (story)
             self.state_manager.push_state(Scene0State(self.display_surface, self.audio_manager))

@@ -13,6 +13,7 @@ help:
 	@echo "  make run3     - Run scene 3 (behind bunker) directly"
 	@echo "  make run4     - Run scene 4 (dragonteeth) directly"
 	@echo "  make run5     - Run scene 5 (bunker interior) directly"
+	@echo "  make run fight0 - Run fight 0 (battle arena) directly"
 	@echo "  make clean    - Remove virtual environment"
 	@echo "  make test     - Run tests (when available)"
 	@echo ""
@@ -66,8 +67,17 @@ run:
 		echo "Virtual environment not found. Run 'make venv' first."; \
 		exit 1; \
 	fi
-	@echo "Starting Ligne Maudite..."
-	@./venv/bin/python main.py
+	@if [ "$(filter fight0,$(MAKECMDGOALS))" = "fight0" ]; then \
+		echo "Starting Fight 0 (Battle Arena)..."; \
+		./venv/bin/python main.py --scene fight0; \
+	else \
+		echo "Starting Ligne Maudite..."; \
+		./venv/bin/python main.py; \
+	fi
+
+# This allows 'make run fight0' to work
+fight0:
+	@:
 
 clean:
 	@echo "Removing virtual environment..."
@@ -130,3 +140,4 @@ run5:
 	fi
 	@echo "Starting Scene 5 (Bunker Interior)..."
 	@./venv/bin/python main.py --scene 5
+
